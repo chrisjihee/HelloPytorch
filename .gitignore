@@ -1,5 +1,4 @@
 .idea
 .ipynb_checkpoints
 model*.*
-MNIST_data
-nsmc
+dat

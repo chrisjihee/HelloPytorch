@@ -164,5 +164,5 @@ def main(args):
 
 
 if __name__ == '__main__':
-    dm, model, trainer = main(parse_args("""--gpus 1 --max_epochs 3 --transformer distilbert-base-cased""".split()))
+    dm, model, trainer = main(parse_args("""--transformer distilbert-base-cased --gpus 1 --max_epochs 3 --num_sanity_val_steps 0""".split()))
     trainer.fit(model, dm)

@@ -57,16 +57,10 @@ class MRPCLightningData(pl.LightningDataModule):
         return DataLoader(self.dataset['train'], batch_size=self.batch_size)
 
     def val_dataloader(self):
-        if len(self.eval_splits) == 1:
-            return DataLoader(self.dataset['validation'], batch_size=self.batch_size)
-        elif len(self.eval_splits) > 1:
-            return [DataLoader(self.dataset[x], batch_size=self.batch_size) for x in self.eval_splits]
+        return DataLoader(self.dataset['validation'], batch_size=self.batch_size)
 
     def test_dataloader(self):
-        if len(self.eval_splits) == 1:
-            return DataLoader(self.dataset['test'], batch_size=self.batch_size)
-        elif len(self.eval_splits) > 1:
-            return [DataLoader(self.dataset[x], batch_size=self.batch_size) for x in self.eval_splits]
+        return DataLoader(self.dataset['test'], batch_size=self.batch_size)
 
 
 class MRPCLightning(pl.LightningModule):
@@ -132,7 +126,6 @@ class MRPCLightning(pl.LightningModule):
         loss = torch.stack([x['loss'] for x in outputs]).mean()
         self.log('val_loss', loss, prog_bar=True)
         self.log_dict(self.metric.compute(predictions=preds, references=labels), prog_bar=True)
-        return loss
 
     @staticmethod
     def add_model_specific_args(parent_parser):

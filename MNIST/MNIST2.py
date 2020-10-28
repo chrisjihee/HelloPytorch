@@ -178,6 +178,6 @@ class MNISTLit(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    trainer = pl.Trainer(max_epochs=2, num_sanity_val_steps=0, progress_bar_refresh_rate=20, gpus=1)
+    trainer = pl.Trainer(max_epochs=5, num_sanity_val_steps=0, progress_bar_refresh_rate=20, gpus=1)
     trainer.fit(MNISTLit(learning_rate=0.001), MNISTLitData())
     trainer.test()

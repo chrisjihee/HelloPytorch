@@ -21,7 +21,7 @@ def show_accuracy(name, acc):
     return f'{name} Accuracy: {metric * 100:.2f}% {detail}'
 
 
-class MRPCLightningData(pl.LightningDataModule, ABC):
+class MRPCLightningData(pl.LightningDataModule):
     loader_columns = ['datasets_idx', 'input_ids', 'token_type_ids', 'attention_mask', 'start_positions', 'end_positions', 'labels']
 
     def __init__(self, transformer: str, max_seq_length: int = 128, batch_size: int = 32):
@@ -49,7 +49,7 @@ class MRPCLightningData(pl.LightningDataModule, ABC):
 
     def to_features(self, batch):
         texts = list(zip(batch['sentence1'], batch['sentence2']))
-        features = self.tokenizer.batch_encode_plus(texts, max_length=self.max_seq_length, pad_to_max_length=True, truncation=True)
+        features = self.tokenizer.batch_encode_plus(texts, padding='max_length', max_length=self.max_seq_length, truncation=True)
         features['labels'] = batch['label']
         return features
 
@@ -69,7 +69,7 @@ class MRPCLightningData(pl.LightningDataModule, ABC):
             return [DataLoader(self.dataset[x], batch_size=self.batch_size) for x in self.eval_splits]
 
 
-class MRPCLightning(pl.LightningModule, ABC):
+class MRPCLightning(pl.LightningModule):
     def __init__(self, transformer: str, num_labels: int,
                  learning_rate: float = 2e-5,
                  adam_epsilon: float = 1e-8,
@@ -82,7 +82,7 @@ class MRPCLightning(pl.LightningModule, ABC):
         self.save_hyperparameters()
         self.config = AutoConfig.from_pretrained(transformer, num_labels=num_labels)
         self.model = AutoModelForSequenceClassification.from_pretrained(transformer, config=self.config)
-        self.metric = datasets.load_metric('glue', self.hparams.task_name, experiment_id="MyExpriment-1")
+        self.metric = datasets.load_metric('glue', 'mrpc', experiment_id="MyExpriment-1")
         self.total_steps = None
 
     def forward(self, **inputs):
@@ -164,5 +164,5 @@ def main(args):
 
 
 if __name__ == '__main__':
-    dm, model, trainer = main(parse_args("""--gpus 1 --max_epochs 3 --task_name mrpc --transformer_name distilbert-base-cased""".split()))
+    dm, model, trainer = main(parse_args("""--gpus 1 --max_epochs 3 --transformer distilbert-base-cased""".split()))
     trainer.fit(model, dm)

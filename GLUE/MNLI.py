@@ -1,26 +1,64 @@
 import datasets
-import pytorch_lightning as pl
 import torch
-import torch.nn.functional as F
+from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from sklearn.metrics import accuracy_score
 from torch import nn
+from torch.nn.functional import cross_entropy
 from torch.utils.data import TensorDataset, RandomSampler, DataLoader, random_split
 from transformers import BertModel, BertTokenizer
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 from transformers.data.processors import glue
+from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer
 
 pretrained_model = 'bert-base-cased'
 
 
+class DataMNLI(LightningDataModule):
+    def __init__(self, pretrained_model: str = 'bert-base-cased', max_seq_length: int = 128,
+                 max_train_data: int = 1000, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification',
+                 data_dir: str = 'glue_data/MNLI', batch_size: int = 32, num_workers: int = 8):
+        super().__init__()
+        self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
+        self.processor = glue.MnliProcessor()
+
+        self.max_train_data = max_train_data
+        self.label_list = label_list
+        self.output_mode = output_mode
+
+        self.data_dir = data_dir
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+
+        self.dataset = dict()
+
+    def prepare_data(self):
+        pass  # done by download_glue_data.py
+
+    def setup(self, stage=None):
+        self.dataset['train'] = self.processor.get_train_examples(self.data_dir)[:self.max_train_data]
+        self.dataset['devel'] = self.processor.get_dev_examples(self.data_dir)
+        self.dataset['test'] = self.processor.get_test_examples(self.data_dir)
+
+    def train_dataloader(self):
+        pass
+
+    def val_dataloader(self):
+        pass
+
+    def test_dataloader(self):
+        pass
+
+
 def generate_mnli_bert_dataloaders():
-    tokenizer = BertTokenizer.from_pretrained(pretrained_model)
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
     processor = glue.MnliProcessor()
 
     # ----------------------
     # TRAIN/VAL DATALOADERS
     # ----------------------
-    train = processor.get_train_examples('glue_data/MNLI')
-    features = convert_examples_to_features(train, tokenizer, max_length=128, task="mnli", label_list=['contradiction', 'neutral', 'entailment'], output_mode='classification')
+    train = processor.get_train_examples('glue_data/MNLI')[:1000]
+    print(f"#train: {len(train)}")
+    features = convert_examples_to_features(train, tokenizer, max_length=128, label_list=['contradiction', 'neutral', 'entailment'], output_mode='classification')
     train_dataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
                                   torch.tensor([f.attention_mask for f in features], dtype=torch.long),
                                   torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
@@ -29,26 +67,22 @@ def generate_mnli_bert_dataloaders():
     nb_train_samples = int(0.95 * len(train_dataset))
     nb_val_samples = len(train_dataset) - nb_train_samples
     bert_mnli_train_dataset, bert_mnli_val_dataset = random_split(train_dataset, [nb_train_samples, nb_val_samples])
-
-    # train loader
-    train_sampler = RandomSampler(bert_mnli_train_dataset)
+    train_sampler, val_sampler = RandomSampler(bert_mnli_train_dataset), RandomSampler(bert_mnli_val_dataset)
     bert_mnli_train_dataloader = DataLoader(bert_mnli_train_dataset, sampler=train_sampler, batch_size=32, num_workers=8)
-
-    # val loader
-    val_sampler = RandomSampler(bert_mnli_val_dataset)
     bert_mnli_val_dataloader = DataLoader(bert_mnli_val_dataset, sampler=val_sampler, batch_size=32, num_workers=8)
 
     # ----------------------
     # TEST DATALOADERS
     # ----------------------
-    dev = processor.get_dev_examples('glue_data/MNLI')
-    features = convert_examples_to_features(dev, tokenizer, max_length=128, task="mnli", label_list=['contradiction', 'neutral', 'entailment'], output_mode='classification')
+    devel = processor.get_dev_examples('glue_data/MNLI')
+    print(f"#devel: {len(devel)}")
+    test = processor.get_test_examples('glue_data/MNLI')
+    print(f"#test: {len(test)}")
+    features = convert_examples_to_features(devel, tokenizer, max_length=128, label_list=['contradiction', 'neutral', 'entailment'], output_mode='classification')
     bert_mnli_test_dataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
                                            torch.tensor([f.attention_mask for f in features], dtype=torch.long),
                                            torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
                                            torch.tensor([f.label for f in features], dtype=torch.long))
-
-    # test dataset
     test_sampler = RandomSampler(bert_mnli_test_dataset)
     bert_mnli_test_dataloader = DataLoader(bert_mnli_test_dataset, sampler=test_sampler, batch_size=32, num_workers=8)
 
@@ -58,9 +92,9 @@ def generate_mnli_bert_dataloaders():
 bert_mnli_train_dataloader, bert_mnli_val_dataloader, bert_mnli_test_dataloader = generate_mnli_bert_dataloaders()
 
 
-class BertMNLIFinetuner(pl.LightningModule):
+class ModelMNLI(LightningModule):
     def __init__(self):
-        super(BertMNLIFinetuner, self).__init__()
+        super(ModelMNLI, self).__init__()
         self.bert = BertModel.from_pretrained(pretrained_model, output_attentions=True)
         self.W = nn.Linear(self.bert.config.hidden_size, 3)
         self.num_classes = 3
@@ -77,13 +111,13 @@ class BertMNLIFinetuner(pl.LightningModule):
     def training_step(self, batch, batch_nb):
         input_ids, attention_mask, token_type_ids, label = batch
         y_hat, attn = self(input_ids, attention_mask, token_type_ids)
-        loss = F.cross_entropy(y_hat, label)
+        loss = cross_entropy(y_hat, label)
         return loss
 
     def validation_step(self, batch, batch_nb):
         input_ids, attention_mask, token_type_ids, label = batch
         y_hat, attn = self(input_ids, attention_mask, token_type_ids)
-        loss = F.cross_entropy(y_hat, label)
+        loss = cross_entropy(y_hat, label)
         a, y_hat = torch.max(y_hat, dim=1)
         val_acc = accuracy_score(y_hat.cpu(), label.cpu())
         val_acc = torch.tensor(val_acc)
@@ -124,7 +158,6 @@ if __name__ == '__main__':
     data_size = {k: len(v) for k, v in data.items()}
     print(f"* MNLI Dataset: {data_size} * {data['train'].column_names}")
 
-    bert_finetuner = BertMNLIFinetuner()
-    trainer = pl.Trainer(gpus=1, max_epochs=1)
-    trainer.fit(bert_finetuner)
+    trainer = Trainer(gpus=1, max_epochs=1)
+    trainer.fit(model=ModelMNLI())
     trainer.test()

@@ -40,14 +40,16 @@ class DataMNIST(LightningDataModule):
         MNIST(self.data_dir, train=False, download=True)
 
     def setup(self, stage=None):
-        self.dataset['train'], self.dataset['valid'] = random_split(MNIST(self.data_dir, train=True, transform=self.transform), [55000, 5000])
+        self.dataset['train'], self.dataset['devel'] = random_split(MNIST(self.data_dir, train=True, transform=self.transform), [55000, 5000])
         self.dataset['test'] = MNIST(self.data_dir, train=False, transform=self.transform)
+        print(self.dataset['train'][0])
+        exit(1)
 
     def train_dataloader(self):
         return DataLoader(self.dataset['train'], batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self.dataset['valid'], batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(self.dataset['devel'], batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
         return DataLoader(self.dataset['test'], batch_size=self.batch_size, num_workers=self.num_workers)
@@ -60,7 +62,7 @@ class ModelMNIST(LightningModule):
         self.metric_detail = metric_detail
         self.metric = {
             'train': {"loss": list(), "acc": Accuracy()},
-            'valid': {"loss": list(), "acc": Accuracy()},
+            'devel': {"loss": list(), "acc": Accuracy()},
             'test': {"loss": list(), "acc": Accuracy()},
         }
 
@@ -129,8 +131,8 @@ class ModelMNIST(LightningModule):
         loss = cross_entropy(logits, labels)
         logits = logits.detach().cpu()
         labels = labels.detach().cpu()
-        self.metric['valid']['acc'].update(preds=logits, target=labels)
-        self.metric['valid']['loss'].append(loss.detach().cpu())
+        self.metric['devel']['acc'].update(preds=logits, target=labels)
+        self.metric['devel']['loss'].append(loss.detach().cpu())
         return {'loss': loss, 'logits': logits, 'labels': labels}
 
     def test_step(self, batch: List[Tensor], batch_idx: int):
@@ -156,10 +158,10 @@ class ModelMNIST(LightningModule):
         print()
         print(f"| Loss     | {{"
               f" train: {str_loss(self.metric['train']['loss'])},"
-              f" valid: {str_loss(self.metric['valid']['loss'])} }}")
+              f" devel: {str_loss(self.metric['devel']['loss'])} }}")
         print(f"| Accuracy | {{"
               f" train: {str_accuracy(self.metric['train']['acc'], self.metric_detail)},"
-              f" valid: {str_accuracy(self.metric['valid']['acc'], self.metric_detail)} }}")
+              f" devel: {str_accuracy(self.metric['devel']['acc'], self.metric_detail)} }}")
         print("=" * 5 + f" [DONE] [Epoch {self.current_epoch + 1}/{self.trainer.max_epochs}] " + "=" * 70)
         print()
 
@@ -167,10 +169,10 @@ class ModelMNIST(LightningModule):
         print()
         print(f"| Loss     | {{"
               f" test: {str_loss(self.metric['test']['loss'])},"
-              f" valid: {str_loss(self.metric['valid']['loss'])} }}")
+              f" devel: {str_loss(self.metric['devel']['loss'])} }}")
         print(f"| Accuracy | {{"
               f" test: {str_accuracy(self.metric['test']['acc'], self.metric_detail)},"
-              f" valid: {str_accuracy(self.metric['valid']['acc'], self.metric_detail)} }}")
+              f" devel: {str_accuracy(self.metric['devel']['acc'], self.metric_detail)} }}")
         print("=" * 5 + f" [DONE] [Test Epoch] " + "=" * 70)
         print()
 

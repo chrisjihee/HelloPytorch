@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import List, Dict, Optional, Any
 
 import torch
 import pytorch_lightning
@@ -6,15 +6,15 @@ from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from pytorch_lightning.metrics import Accuracy
 from torch import nn, optim, Tensor
 from torch.nn.functional import cross_entropy
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import random_split, DataLoader, Dataset
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
 pytorch_lightning.seed_everything(10000)
 
 
-def split_validation(dataset, rate):
-    num_valid = int(len(dataset) * rate)
+def split_validation(dataset, rate: float):
+    num_valid = int(len(dataset) * float(rate))
     num_train = len(dataset) - num_valid
     return random_split(dataset=dataset, lengths=[num_train, num_valid])
 
@@ -32,23 +32,22 @@ def str_accuracy(acc: Accuracy, detail: bool = False):
 
 
 class DataMNIST(LightningDataModule):
-    def __init__(self, batch_size: int = 100, num_workers: int = 8, data_dir: str = '/dat/data/'):
+    def __init__(self, rate_valid: float = 0.05, batch_size: int = 100, num_workers: int = 8, data_dir: str = '/dat/data/'):
         super().__init__()
         self.data_dir = data_dir
+        self.rate_valid = rate_valid
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.transform = transforms.ToTensor()
-        self.dataset = dict()
+        self.dataset: Dict[str, Dataset] = dict()
 
     def prepare_data(self):
-        MNIST(self.data_dir, train=True, download=True)
-        MNIST(self.data_dir, train=False, download=True)
+        self.dataset['fit'] = MNIST(self.data_dir, download=True, train=True, transform=self.transform)
+        self.dataset['test'] = MNIST(self.data_dir, download=True, train=False, transform=self.transform)
 
-    def setup(self, stage=None):
-        self.dataset['train'], self.dataset['valid'] = random_split(MNIST(self.data_dir, train=True, transform=self.transform), [55000, 5000])
-        self.dataset['test'] = MNIST(self.data_dir, train=False, transform=self.transform)
-        print(self.dataset['train'][0])
-        exit(1)
+    def setup(self, stage: Optional[str] = None):
+        if stage == 'fit':
+            self.dataset['train'], self.dataset['valid'] = split_validation(self.dataset.pop('fit'), self.rate_valid)
 
     def train_dataloader(self):
         return DataLoader(self.dataset['train'], batch_size=self.batch_size, num_workers=self.num_workers)

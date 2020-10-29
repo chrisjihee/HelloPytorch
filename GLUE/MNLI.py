@@ -7,9 +7,9 @@ import torch
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from pytorch_lightning.metrics import Accuracy
 from sklearn.metrics import accuracy_score
-from torch import nn, optim, Tensor
+from torch import nn, Tensor
 from torch.nn.functional import cross_entropy
-from torch.utils.data import TensorDataset, RandomSampler, DataLoader, random_split
+from torch.utils.data import random_split, TensorDataset, RandomSampler, DataLoader, Dataset
 from transformers import BertModel, BertTokenizer
 from transformers import glue_convert_examples_to_features as to_features
 from transformers.data.processors import glue
@@ -18,8 +18,8 @@ from transformers.data.processors.utils import InputExample
 pytorch_lightning.seed_everything(10000)
 
 
-def split_validation(dataset, rate):
-    num_valid = int(len(dataset) * rate)
+def split_validation(dataset, rate: float):
+    num_valid = int(len(dataset) * float(rate))
     num_train = len(dataset) - num_valid
     return random_split(dataset=dataset, lengths=[num_train, num_valid])
 
@@ -37,7 +37,7 @@ def str_accuracy(acc: Accuracy, detail: bool = False):
 
 
 class DataMNLI(LightningDataModule):
-    def __init__(self, pretrained_model: str, max_seq_length: int = 128, rate_valid=0.05, batch_size: int = 32, num_workers: int = 8, data_dir: str = 'glue_data/MNLI'):
+    def __init__(self, pretrained_model: str, max_seq_length: int = 128, rate_valid: float = 0.05, batch_size: int = 32, num_workers: int = 8, data_dir: str = 'glue_data/MNLI'):
         super().__init__()
         self.output_mode = 'classification'
         self.label_list = ['contradiction', 'neutral', 'entailment']
@@ -49,7 +49,7 @@ class DataMNLI(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.samples: Dict[str, List[InputExample]] = dict()
-        self.dataset: Dict[str, TensorDataset] = dict()
+        self.dataset: Dict[str, Dataset] = dict()
 
     def prepare_data(self):
         self.samples['fit'] = self.processor.get_train_examples(self.data_dir)[:self.batch_size * 100 * 3]  # for quick test

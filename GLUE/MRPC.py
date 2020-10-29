@@ -9,11 +9,7 @@ from pytorch_lightning import Trainer, LightningDataModule
 from pytorch_lightning.metrics import Accuracy
 from torch import optim, Tensor
 from torch.utils.data import DataLoader
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoConfig,
-    AutoTokenizer,
-)
+from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer
 
 
 def str_loss(loss: List[Tensor]):
@@ -95,7 +91,7 @@ class ModelMRPC(pl.LightningModule):
         loss = outputs[0]
         return loss
 
-    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+    def validation_step(self, batch, batch_idx):
         outputs = self(**batch)
         val_loss, logits = outputs[:2]
         preds = torch.argmax(logits, axis=1)
@@ -132,4 +128,3 @@ if __name__ == '__main__':
     trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0, progress_bar_refresh_rate=20)
     model = ModelMRPC(transformer='distilbert-base-cased', num_labels=dm.num_labels, learning_rate=2e-5, adam_epsilon=1e-8)
     trainer.fit(model, dm)
-    trainer.test()

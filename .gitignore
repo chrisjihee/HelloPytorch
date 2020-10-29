@@ -1,5 +1,7 @@
 .idea
 .ipynb_checkpoints
+lightning_logs
 model*.*
 dat
-lightning_logs
+data
+glue_data

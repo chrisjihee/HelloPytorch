@@ -1,104 +1,19 @@
-from abc import ABC
-from argparse import ArgumentParser
-from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
-import torch
-import pytorch_lightning as pl
+from typing import List
+from typing import Optional
+
 import datasets
+import pytorch_lightning
+import pytorch_lightning as pl
+import torch
+from pytorch_lightning import Trainer, LightningDataModule
+from pytorch_lightning.metrics import Accuracy
+from torch import optim, Tensor
 from torch.utils.data import DataLoader
 from transformers import (
-    AdamW,
     AutoModelForSequenceClassification,
     AutoConfig,
     AutoTokenizer,
-    get_linear_schedule_with_warmup,
 )
-from transformers.data.processors.glue import MnliProcessor
-from transformers.data.processors.glue import MrpcProcessor
-import torch
-from transformers import (
-    BertModel,
-    BertTokenizer
-)
-
-tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
-bert = BertModel.from_pretrained('bert-base-cased', output_attentions=True)
-from sklearn.metrics import accuracy_score
-import torch.nn.functional as F
-
-
-class BertMNLIFinetuner(pl.LightningModule):
-    def __init__(self):
-        super(BertMNLIFinetuner, self).__init__()
-        self.bert = bert
-        self.W = nn.Linear(bert.config.hidden_size, 3)
-        self.num_classes = 3
-
-    def forward(self, input_ids, attention_mask, token_type_ids):
-        h, _, attn = self.bert(input_ids=input_ids,
-                               attention_mask=attention_mask,
-                               token_type_ids=token_type_ids)
-        h_cls = h[:, 0]
-        logits = self.W(h_cls)
-        return logits, attn
-
-    def configure_optimizers(self):
-        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=2e-05, eps=1e-08)
-
-    def training_step(self, batch, batch_nb):
-        # batch
-        input_ids, attention_mask, token_type_ids, label = batch
-        # fwd
-        y_hat, attn = self(input_ids, attention_mask, token_type_ids)
-        # loss
-        loss = F.cross_entropy(y_hat, label)
-        # logs
-        tensorboard_logs = {'train_loss': loss}
-        return {'loss': loss, 'log': tensorboard_logs}
-
-    def validation_step(self, batch, batch_nb):
-        # batch
-        input_ids, attention_mask, token_type_ids, label = batch
-        # fwd
-        y_hat, attn = self(input_ids, attention_mask, token_type_ids)
-        # loss
-        loss = F.cross_entropy(y_hat, label)
-        # acc
-        a, y_hat = torch.max(y_hat, dim=1)
-        val_acc = accuracy_score(y_hat.cpu(), label.cpu())
-        val_acc = torch.tensor(val_acc)
-        return {'val_loss': loss, 'val_acc': val_acc}
-
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        avg_val_acc = torch.stack([x['val_acc'] for x in outputs]).mean()
-        tensorboard_logs = {'val_loss': avg_loss, 'avg_val_acc': avg_val_acc}
-        return {'val_loss': avg_loss, 'progress_bar': tensorboard_logs}
-
-    def test_step(self, batch, batch_nb):
-        input_ids, attention_mask, token_type_ids, label = batch
-        y_hat, attn = self(input_ids, attention_mask, token_type_ids)
-        a, y_hat = torch.max(y_hat, dim=1)
-        test_acc = accuracy_score(y_hat.cpu(), label.cpu())
-        return {'test_acc': torch.tensor(test_acc)}
-
-    def test_epoch_end(self, outputs):
-        avg_test_acc = torch.stack([x['test_acc'] for x in outputs]).mean()
-        tensorboard_logs = {'avg_test_acc': avg_test_acc}
-        return {'avg_test_acc': avg_test_acc, 'log': tensorboard_logs, 'progress_bar': tensorboard_logs}
-
-
-from typing import Any, List
-
-import torch
-import pytorch_lightning
-from pytorch_lightning import Trainer, LightningModule, LightningDataModule
-from pytorch_lightning.metrics import Accuracy
-from torch import nn, optim, Tensor
-from torch.nn.functional import cross_entropy
-from torch.utils.data import random_split, DataLoader
-from torchvision import transforms
-from torchvision.datasets import MNIST
 
 
 def str_loss(loss: List[Tensor]):

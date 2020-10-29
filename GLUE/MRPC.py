@@ -132,3 +132,4 @@ if __name__ == '__main__':
     trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0, progress_bar_refresh_rate=20)
     model = ModelMRPC(transformer='distilbert-base-cased', num_labels=dm.num_labels, learning_rate=2e-5, adam_epsilon=1e-8)
     trainer.fit(model, dm)
+    trainer.test()

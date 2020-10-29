@@ -117,10 +117,10 @@ class ModelMRPC(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    # data: datasets.dataset_dict.DatasetDict = datasets.load_dataset('glue', 'mrpc')
-    # data['valid'] = data.pop('validation')
-    # data_size = {k: len(v) for k, v in data.items()}
-    # print(f"* Dataset: {data_size} * {data['train'].column_names}")
+    data: datasets.dataset_dict.DatasetDict = datasets.load_dataset('glue', 'mrpc')
+    data['valid'] = data.pop('validation')
+    data_size = {k: len(v) for k, v in data.items()}
+    print(f"* MRPC Dataset: {data_size} * {data['train'].column_names}")
 
     dm = DataMRPC(transformer='distilbert-base-cased')
     dm.prepare_data()

@@ -1,3 +1,4 @@
+import datasets
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
@@ -115,6 +116,14 @@ class BertMNLIFinetuner(pl.LightningModule):
 
 
 if __name__ == '__main__':
+    data: datasets.dataset_dict.DatasetDict = datasets.load_dataset('glue', 'mnli')
+    data['valid'] = data.pop('validation_matched')
+    data['test'] = data.pop('test_matched')
+    data.pop('validation_mismatched')
+    data.pop('test_mismatched')
+    data_size = {k: len(v) for k, v in data.items()}
+    print(f"* MNLI Dataset: {data_size} * {data['train'].column_names}")
+
     bert_finetuner = BertMNLIFinetuner()
     trainer = pl.Trainer(gpus=1, max_epochs=1)
     trainer.fit(bert_finetuner)

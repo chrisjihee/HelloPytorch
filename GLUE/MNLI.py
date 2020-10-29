@@ -15,7 +15,6 @@ from transformers.data.processors import glue
 from transformers.data.processors.utils import InputExample, InputFeatures
 
 pytorch_lightning.seed_everything(10000)
-pretrained_model = 'bert-base-cased'
 
 
 def split_validation(dataset, rate):
@@ -25,7 +24,7 @@ def split_validation(dataset, rate):
 
 
 class DataMNLI(LightningDataModule):
-    def __init__(self, pretrained_model: str = 'bert-base-cased', max_seq_length: int = 128,
+    def __init__(self, pretrained_model: str, max_seq_length: int = 128,
                  label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification', rate_valid=0.05,
                  data_dir: str = 'glue_data/MNLI', batch_size: int = 32, num_workers: int = 8):
         super().__init__()
@@ -79,7 +78,7 @@ class DataMNLI(LightningDataModule):
 
 
 class ModelMNLI(LightningModule):
-    def __init__(self):
+    def __init__(self, pretrained_model: str):
         super(ModelMNLI, self).__init__()
         self.bert = BertModel.from_pretrained(pretrained_model, output_attentions=True)
         self.W = nn.Linear(self.bert.config.hidden_size, 3)
@@ -136,5 +135,5 @@ if __name__ == '__main__':
     print(f"* MNLI Dataset: {data_size} * {data['train'].column_names}")
 
     trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0)
-    trainer.fit(model=ModelMNLI(), datamodule=DataMNLI())
+    trainer.fit(model=ModelMNLI('bert-base-cased'), datamodule=DataMNLI('bert-base-cased'))
     trainer.test()

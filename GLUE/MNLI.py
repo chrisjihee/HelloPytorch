@@ -1,3 +1,4 @@
+import dataclasses
 from typing import List, Dict
 
 import datasets
@@ -8,7 +9,6 @@ from sklearn.metrics import accuracy_score
 from torch import nn
 from torch.nn.functional import cross_entropy
 from torch.utils.data import TensorDataset, RandomSampler, DataLoader, random_split
-from transformers import AutoTokenizer
 from transformers import BertModel, BertTokenizer
 from transformers import glue_convert_examples_to_features as to_features
 from transformers.data.processors import glue
@@ -59,13 +59,12 @@ class DataMNLI(LightningDataModule):
                                              torch.tensor([f.attention_mask for f in self.features['test']], dtype=torch.long),
                                              torch.tensor([f.token_type_ids for f in self.features['test']], dtype=torch.long),
                                              torch.tensor([f.label for f in self.features['test']], dtype=torch.long))
-        # print(f"#examples: {len(examples)}")
-        # print(f"examples[0]={examples[0]}")
-        # print(f"features[0]={features[0]}")
-        # print(f"keys of features={dataclasses.asdict(features[0]).keys()}")
-        # print(train_dataset[0])
+        # print(f"#examples: {len(self.examples['train'])}")
+        # print(f"examples[0]={self.examples['train'][0]}")
+        # print(f"features[0]={self.features['train'][0]}")
+        # print(f"keys of features={dataclasses.asdict(self.features['train'][0]).keys()}")
+        # print(self.dataset['train'][0])
         # exit(1)
-
         self.dataset['train'], self.dataset['valid'] = split_validation(self.dataset['train'], self.rate_valid)
 
     def train_dataloader(self):
@@ -77,33 +76,6 @@ class DataMNLI(LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.dataset['test'], batch_size=self.batch_size, num_workers=self.num_workers)
-
-
-def generate_mnli_bert_dataloaders():
-    tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
-    processor = glue.MnliProcessor()
-
-    examples: List[InputExample] = processor.get_train_examples('glue_data/MNLI')[:32 * 100 * 3]  # for quick test
-    features: List[InputFeatures] = to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
-    train_dataset: TensorDataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
-                                                 torch.tensor([f.attention_mask for f in features], dtype=torch.long),
-                                                 torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
-                                                 torch.tensor([f.label for f in features], dtype=torch.long))
-    train_dataset, valid_dataset = split_validation(train_dataset, 0.05)
-    train_loader = DataLoader(train_dataset, batch_size=32, num_workers=8, sampler=RandomSampler(train_dataset))
-    valid_loader = DataLoader(valid_dataset, batch_size=32, num_workers=8)
-
-    examples: List[InputExample] = processor.get_dev_examples('glue_data/MNLI')
-    features: List[InputFeatures] = to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
-    test_dataset: TensorDataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
-                                                torch.tensor([f.attention_mask for f in features], dtype=torch.long),
-                                                torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
-                                                torch.tensor([f.label for f in features], dtype=torch.long))
-    test_loader = DataLoader(test_dataset, batch_size=32, num_workers=8)
-    return train_loader, valid_loader, test_loader
-
-
-bert_mnli_train_dataloader, bert_mnli_val_dataloader, bert_mnli_test_dataloader = generate_mnli_bert_dataloaders()
 
 
 class ModelMNLI(LightningModule):
@@ -153,15 +125,6 @@ class ModelMNLI(LightningModule):
         avg_test_acc = torch.stack([x['test_acc'] for x in outputs]).mean()
         self.log_dict({'avg_test_acc': avg_test_acc}, prog_bar=True)
 
-    def train_dataloader(self):
-        return bert_mnli_train_dataloader
-
-    def val_dataloader(self):
-        return bert_mnli_val_dataloader
-
-    def test_dataloader(self):
-        return bert_mnli_test_dataloader
-
 
 if __name__ == '__main__':
     data: datasets.dataset_dict.DatasetDict = datasets.load_dataset('glue', 'mnli')
@@ -172,6 +135,6 @@ if __name__ == '__main__':
     data_size = {k: len(v) for k, v in data.items()}
     print(f"* MNLI Dataset: {data_size} * {data['train'].column_names}")
 
-    trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0, progress_bar_refresh_rate=20)
-    trainer.fit(model=ModelMNLI())
+    trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0)
+    trainer.fit(model=ModelMNLI(), datamodule=DataMNLI())
     trainer.test()

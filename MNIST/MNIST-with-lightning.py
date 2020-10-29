@@ -1,6 +1,7 @@
 from typing import Any, List
 
 import torch
+import pytorch_lightning
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from pytorch_lightning.metrics import Accuracy
 from torch import nn, optim, Tensor
@@ -22,9 +23,7 @@ def str_accuracy(acc: Accuracy, detail: bool = False):
     return f'{metric * 100:.2f}%' if not detail else f'{metric * 100:.2f}%(={acc.correct}/{acc.total})'
 
 
-torch.manual_seed(777)
-if torch.cuda.is_available():
-    torch.cuda.manual_seed_all(777)
+pytorch_lightning.seed_everything(10000)
 
 
 class DataMNIST(LightningDataModule):

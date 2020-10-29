@@ -14,22 +14,35 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
+from typing import Any, List
 
-def str_accuracy(name: str, acc: pl.metrics.Accuracy):
+import torch
+import pytorch_lightning
+from pytorch_lightning import Trainer, LightningModule, LightningDataModule
+from pytorch_lightning.metrics import Accuracy
+from torch import nn, optim, Tensor
+from torch.nn.functional import cross_entropy
+from torch.utils.data import random_split, DataLoader
+from torchvision import transforms
+from torchvision.datasets import MNIST
+
+
+def str_loss(loss: List[Tensor]):
+    metric = torch.mean(torch.stack(loss))
+    return f'{metric:.4f}'
+
+
+def str_accuracy(acc: Accuracy, detail: bool = False):
     backup = acc.correct, acc.total
-    detail = f'(={acc.correct}/{acc.total})'
     metric = acc.compute()
     acc.correct, acc.total = backup
-    return f'{name}: {metric * 100:.2f}% {detail}'
+    return f'{metric * 100:.2f}%' if not detail else f'{metric * 100:.2f}%(={acc.correct}/{acc.total})'
 
 
-def new_accuracy(logits: torch.Tensor, labels: torch.Tensor):
-    metric = pl.metrics.Accuracy()
-    metric.update(preds=logits, target=labels)
-    return metric
+pytorch_lightning.seed_everything(10000)
 
 
-class MRPCLitData(pl.LightningDataModule):
+class DataMRPC(LightningDataModule):
     loader_columns = ['datasets_idx', 'input_ids', 'token_type_ids', 'attention_mask', 'start_positions', 'end_positions', 'labels']
 
     def __init__(self, transformer: str, max_seq_length: int = 128, batch_size: int = 32):
@@ -71,7 +84,7 @@ class MRPCLitData(pl.LightningDataModule):
         return DataLoader(self.dataset['test'], batch_size=self.batch_size)
 
 
-class MRPCLit(pl.LightningModule):
+class ModelMRPC(pl.LightningModule):
     def __init__(self, transformer: str, num_labels: int,
                  learning_rate: float = 2e-5,
                  adam_epsilon: float = 1e-8,
@@ -145,33 +158,17 @@ class MRPCLit(pl.LightningModule):
         print()
 
 
-def add_model_specific_args(parent_parser):
-    parser = ArgumentParser(parents=[parent_parser], add_help=False)
+if __name__ == '__main__':
+    parser = ArgumentParser(parents=[DataMRPC.add_argparse_args(Trainer.add_argparse_args(ArgumentParser()))], add_help=False)
     parser.add_argument("--learning_rate", default=2e-5, type=float)
     parser.add_argument("--adam_epsilon", default=1e-8, type=float)
     parser.add_argument("--warmup_steps", default=0, type=int)
     parser.add_argument("--weight_decay", default=0.0, type=float)
-    return parser
+    args = parser.parse_args("""--transformer distilbert-base-cased --gpus 1 --max_epochs 3 --num_sanity_val_steps 0""".split())
 
-
-def parse_args(args=None):
-    parser = ArgumentParser()
-    parser = pl.Trainer.add_argparse_args(parser)
-    parser = add_model_specific_args(MRPCLitData.add_argparse_args(parser))
-    parser.add_argument('--seed', type=int, default=42)
-    return parser.parse_args(args)
-
-
-def main(args):
-    pl.seed_everything(args.seed)
-    dm = MRPCLitData.from_argparse_args(args)
+    dm = DataMRPC.from_argparse_args(args)
     dm.prepare_data()
     dm.setup('fit')
-    model = MRPCLit(num_labels=dm.num_labels, eval_splits=dm.eval_splits, **vars(args))
-    trainer = pl.Trainer.from_argparse_args(args)
-    return dm, model, trainer
-
-
-if __name__ == '__main__':
-    dm, model, trainer = main(parse_args("""--transformer distilbert-base-cased --gpus 1 --max_epochs 3 --num_sanity_val_steps 0""".split()))
+    model = ModelMRPC(num_labels=dm.num_labels, eval_splits=dm.eval_splits, **vars(args))
+    trainer = Trainer.from_argparse_args(args)
     trainer.fit(model, dm)

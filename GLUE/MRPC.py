@@ -52,6 +52,7 @@ class DataMRPC(LightningDataModule):
         self.eval_splits = [x for x in self.dataset.keys() if 'validation' in x]
         print(self.dataset['train'])
         print(self.dataset['train'][0])
+        print(self.dataset['train'][0].keys())
         exit(1)
 
     def to_features(self, batch):

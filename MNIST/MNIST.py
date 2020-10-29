@@ -42,8 +42,8 @@ class DataMNIST(LightningDataModule):
     def setup(self, stage=None):
         self.dataset['train'], self.dataset['valid'] = random_split(MNIST(self.data_dir, train=True, transform=self.transform), [55000, 5000])
         self.dataset['test'] = MNIST(self.data_dir, train=False, transform=self.transform)
-        # print(self.dataset['train'][0])
-        # exit(1)
+        print(self.dataset['train'][0])
+        exit(1)
 
     def train_dataloader(self):
         return DataLoader(self.dataset['train'], batch_size=self.batch_size, num_workers=self.num_workers)

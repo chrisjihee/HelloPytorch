@@ -13,6 +13,80 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
+from transformers.data.processors.glue import MnliProcessor
+from transformers.data.processors.glue import MrpcProcessor
+import torch
+from transformers import (
+    BertModel,
+    BertTokenizer
+)
+
+tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+bert = BertModel.from_pretrained('bert-base-cased', output_attentions=True)
+from sklearn.metrics import accuracy_score
+import torch.nn.functional as F
+
+
+class BertMNLIFinetuner(pl.LightningModule):
+    def __init__(self):
+        super(BertMNLIFinetuner, self).__init__()
+        self.bert = bert
+        self.W = nn.Linear(bert.config.hidden_size, 3)
+        self.num_classes = 3
+
+    def forward(self, input_ids, attention_mask, token_type_ids):
+        h, _, attn = self.bert(input_ids=input_ids,
+                               attention_mask=attention_mask,
+                               token_type_ids=token_type_ids)
+        h_cls = h[:, 0]
+        logits = self.W(h_cls)
+        return logits, attn
+
+    def configure_optimizers(self):
+        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=2e-05, eps=1e-08)
+
+    def training_step(self, batch, batch_nb):
+        # batch
+        input_ids, attention_mask, token_type_ids, label = batch
+        # fwd
+        y_hat, attn = self(input_ids, attention_mask, token_type_ids)
+        # loss
+        loss = F.cross_entropy(y_hat, label)
+        # logs
+        tensorboard_logs = {'train_loss': loss}
+        return {'loss': loss, 'log': tensorboard_logs}
+
+    def validation_step(self, batch, batch_nb):
+        # batch
+        input_ids, attention_mask, token_type_ids, label = batch
+        # fwd
+        y_hat, attn = self(input_ids, attention_mask, token_type_ids)
+        # loss
+        loss = F.cross_entropy(y_hat, label)
+        # acc
+        a, y_hat = torch.max(y_hat, dim=1)
+        val_acc = accuracy_score(y_hat.cpu(), label.cpu())
+        val_acc = torch.tensor(val_acc)
+        return {'val_loss': loss, 'val_acc': val_acc}
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+        avg_val_acc = torch.stack([x['val_acc'] for x in outputs]).mean()
+        tensorboard_logs = {'val_loss': avg_loss, 'avg_val_acc': avg_val_acc}
+        return {'val_loss': avg_loss, 'progress_bar': tensorboard_logs}
+
+    def test_step(self, batch, batch_nb):
+        input_ids, attention_mask, token_type_ids, label = batch
+        y_hat, attn = self(input_ids, attention_mask, token_type_ids)
+        a, y_hat = torch.max(y_hat, dim=1)
+        test_acc = accuracy_score(y_hat.cpu(), label.cpu())
+        return {'test_acc': torch.tensor(test_acc)}
+
+    def test_epoch_end(self, outputs):
+        avg_test_acc = torch.stack([x['test_acc'] for x in outputs]).mean()
+        tensorboard_logs = {'avg_test_acc': avg_test_acc}
+        return {'avg_test_acc': avg_test_acc, 'log': tensorboard_logs, 'progress_bar': tensorboard_logs}
+
 
 from typing import Any, List
 
@@ -48,7 +122,6 @@ class DataMRPC(LightningDataModule):
     def __init__(self, transformer: str, max_seq_length: int = 128, batch_size: int = 32):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(transformer, use_fast=True)
-        self.transformer = transformer
         self.max_seq_length = max_seq_length
         self.batch_size = batch_size
         self.text_fields = ['sentence1', 'sentence2']
@@ -87,43 +160,20 @@ class DataMRPC(LightningDataModule):
 class ModelMRPC(pl.LightningModule):
     def __init__(self, transformer: str, num_labels: int,
                  learning_rate: float = 2e-5,
-                 adam_epsilon: float = 1e-8,
-                 warmup_steps: int = 0,
-                 weight_decay: float = 0.0,
-                 batch_size: int = 32,
-                 eval_splits: Optional[list] = None,
-                 **kwargs):
+                 adam_epsilon: float = 1e-8):
         super().__init__()
+        self.learning_rate = learning_rate
+        self.adam_epsilon = adam_epsilon
         self.save_hyperparameters()
         self.config = AutoConfig.from_pretrained(transformer, num_labels=num_labels)
         self.model = AutoModelForSequenceClassification.from_pretrained(transformer, config=self.config)
         self.metric = datasets.load_metric('glue', 'mrpc', experiment_id="MyExpriment-1")
-        self.total_steps = None
 
     def forward(self, **inputs):
         return self.model(**inputs)
 
-    def setup(self, stage):
-        if stage == 'fit':
-            train_loader = self.train_dataloader()
-            self.total_steps = ((len(train_loader.dataset) // (self.hparams.batch_size * max(1, self.hparams.gpus))) // self.hparams.accumulate_grad_batches * float(self.hparams.max_epochs))
-
     def configure_optimizers(self):
-        model = self.model
-        no_decay = ["bias", "LayerNorm.weight"]
-        optimizer_grouped_parameters = [
-            {
-                "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-                "weight_decay": self.hparams.weight_decay,
-            },
-            {
-                "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-                "weight_decay": 0.0,
-            },
-        ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
-        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps)
-        return [optimizer], [{'scheduler': scheduler, 'interval': 'step', 'frequency': 1}]
+        return optim.Adam(self.parameters(), lr=self.learning_rate, eps=self.adam_epsilon)
 
     def training_step(self, batch, batch_idx):
         outputs = self(**batch)
@@ -133,16 +183,13 @@ class ModelMRPC(pl.LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         outputs = self(**batch)
         val_loss, logits = outputs[:2]
-        if self.hparams.num_labels >= 1:
-            preds = torch.argmax(logits, axis=1)
-        else:
-            preds = logits.squeeze()
+        preds = torch.argmax(logits, axis=1)
         labels = batch["labels"]
         return {'loss': val_loss, "preds": preds, "labels": labels}
 
     def validation_epoch_end(self, outputs):
-        preds = torch.cat([x['preds'] for x in outputs]).detach().cpu().numpy()
-        labels = torch.cat([x['labels'] for x in outputs]).detach().cpu().numpy()
+        preds = torch.cat([x['preds'] for x in outputs]).detach().cpu()
+        labels = torch.cat([x['labels'] for x in outputs]).detach().cpu()
         loss = torch.stack([x['loss'] for x in outputs]).mean()
         self.log('val_loss', loss, prog_bar=True)
         self.log_dict(self.metric.compute(predictions=preds, references=labels), prog_bar=True)
@@ -159,16 +206,14 @@ class ModelMRPC(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser(parents=[DataMRPC.add_argparse_args(Trainer.add_argparse_args(ArgumentParser()))], add_help=False)
-    parser.add_argument("--learning_rate", default=2e-5, type=float)
-    parser.add_argument("--adam_epsilon", default=1e-8, type=float)
-    parser.add_argument("--warmup_steps", default=0, type=int)
-    parser.add_argument("--weight_decay", default=0.0, type=float)
-    args = parser.parse_args("""--transformer distilbert-base-cased --gpus 1 --max_epochs 3 --num_sanity_val_steps 0""".split())
+    # data: datasets.dataset_dict.DatasetDict = datasets.load_dataset('glue', 'mrpc')
+    # data['valid'] = data.pop('validation')
+    # data_size = {k: len(v) for k, v in data.items()}
+    # print(f"* Dataset: {data_size} * {data['train'].column_names}")
 
-    dm = DataMRPC.from_argparse_args(args)
+    dm = DataMRPC(transformer='distilbert-base-cased')
     dm.prepare_data()
     dm.setup('fit')
-    model = ModelMRPC(num_labels=dm.num_labels, eval_splits=dm.eval_splits, **vars(args))
-    trainer = Trainer.from_argparse_args(args)
+    trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0, progress_bar_refresh_rate=20)
+    model = ModelMRPC(transformer='distilbert-base-cased', num_labels=dm.num_labels, learning_rate=2e-5, adam_epsilon=1e-8)
     trainer.fit(model, dm)

@@ -57,36 +57,34 @@ def generate_mnli_bert_dataloaders():
 
     examples: List[InputExample] = processor.get_train_examples('glue_data/MNLI')[:3]
     features: List[InputFeatures] = convert_examples_to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
-    dataset: TensorDataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
-                                           torch.tensor([f.attention_mask for f in features], dtype=torch.long),
-                                           torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
-                                           torch.tensor([f.label for f in features], dtype=torch.long))
-    print(f"#examples: {len(examples)}")
-    print(f"examples[0]={examples[0]}")
-    print(f"features[0]={features[0]}")
-    print(f"keys of features={dataclasses.asdict(features[0]).keys()}")
-    print(dataset)
-    print(len(dataset))
-    print(dataset[0])
-    exit(1)
+    train_dataset: TensorDataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
+                                                 torch.tensor([f.attention_mask for f in features], dtype=torch.long),
+                                                 torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
+                                                 torch.tensor([f.label for f in features], dtype=torch.long))
+    # print(f"#examples: {len(examples)}")
+    # print(f"examples[0]={examples[0]}")
+    # print(f"features[0]={features[0]}")
+    # print(f"keys of features={dataclasses.asdict(features[0]).keys()}")
+    # print(train_dataset[0])
+    # exit(1)
 
-    nb_train_samples = int(0.95 * len(dataset))
-    nb_val_samples = len(dataset) - nb_train_samples
-    bert_mnli_train_dataset, bert_mnli_val_dataset = random_split(dataset, [nb_train_samples, nb_val_samples])
-    train_sampler, val_sampler = RandomSampler(bert_mnli_train_dataset), RandomSampler(bert_mnli_val_dataset)
-    bert_mnli_train_dataloader = DataLoader(bert_mnli_train_dataset, sampler=train_sampler, batch_size=32, num_workers=8)
-    bert_mnli_val_dataloader = DataLoader(bert_mnli_val_dataset, sampler=val_sampler, batch_size=32, num_workers=8)
+    num_train_data = int(0.95 * len(train_dataset))
+    num_valid_data = len(train_dataset) - num_train_data
+    train_dataset, valid_dataset = random_split(train_dataset, [num_train_data, num_valid_data])
+    train_sampler, valid_sampler = RandomSampler(train_dataset), RandomSampler(valid_dataset)
+    train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=32, num_workers=8)
+    valid_loader = DataLoader(valid_dataset, sampler=valid_sampler, batch_size=32, num_workers=8)
 
-    examples = processor.get_dev_examples('glue_data/MNLI')
-    features = convert_examples_to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
-    bert_mnli_test_dataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
-                                           torch.tensor([f.attention_mask for f in features], dtype=torch.long),
-                                           torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
-                                           torch.tensor([f.label for f in features], dtype=torch.long))
-    test_sampler = RandomSampler(bert_mnli_test_dataset)
-    bert_mnli_test_dataloader = DataLoader(bert_mnli_test_dataset, sampler=test_sampler, batch_size=32, num_workers=8)
+    examples: List[InputExample] = processor.get_dev_examples('glue_data/MNLI')
+    features: List[InputFeatures] = convert_examples_to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
+    test_dataset: TensorDataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
+                                                torch.tensor([f.attention_mask for f in features], dtype=torch.long),
+                                                torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
+                                                torch.tensor([f.label for f in features], dtype=torch.long))
+    test_sampler = RandomSampler(test_dataset)
+    test_loader = DataLoader(test_dataset, sampler=test_sampler, batch_size=32, num_workers=8)
 
-    return bert_mnli_train_dataloader, bert_mnli_val_dataloader, bert_mnli_test_dataloader
+    return train_loader, valid_loader, test_loader
 
 
 bert_mnli_train_dataloader, bert_mnli_val_dataloader, bert_mnli_test_dataloader = generate_mnli_bert_dataloaders()

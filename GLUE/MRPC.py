@@ -1,7 +1,7 @@
 from abc import ABC
 from argparse import ArgumentParser
 from datetime import datetime
-from typing import Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 import torch
 import pytorch_lightning as pl
 import datasets
@@ -15,13 +15,21 @@ from transformers import (
 )
 
 
-def show_accuracy(name, acc):
+def str_accuracy(name: str, acc: pl.metrics.Accuracy):
+    backup = acc.correct, acc.total
     detail = f'(={acc.correct}/{acc.total})'
     metric = acc.compute()
-    return f'{name} Accuracy: {metric * 100:.2f}% {detail}'
+    acc.correct, acc.total = backup
+    return f'{name}: {metric * 100:.2f}% {detail}'
 
 
-class MRPCLightningData(pl.LightningDataModule):
+def new_accuracy(logits: torch.Tensor, labels: torch.Tensor):
+    metric = pl.metrics.Accuracy()
+    metric.update(preds=logits, target=labels)
+    return metric
+
+
+class MRPCLitData(pl.LightningDataModule):
     loader_columns = ['datasets_idx', 'input_ids', 'token_type_ids', 'attention_mask', 'start_positions', 'end_positions', 'labels']
 
     def __init__(self, transformer: str, max_seq_length: int = 128, batch_size: int = 32):
@@ -63,7 +71,7 @@ class MRPCLightningData(pl.LightningDataModule):
         return DataLoader(self.dataset['test'], batch_size=self.batch_size)
 
 
-class MRPCLightning(pl.LightningModule):
+class MRPCLit(pl.LightningModule):
     def __init__(self, transformer: str, num_labels: int,
                  learning_rate: float = 2e-5,
                  adam_epsilon: float = 1e-8,
@@ -102,8 +110,7 @@ class MRPCLightning(pl.LightningModule):
         ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps)
-        scheduler = {'scheduler': scheduler, 'interval': 'step', 'frequency': 1}
-        return [optimizer], [scheduler]
+        return [optimizer], [{'scheduler': scheduler, 'interval': 'step', 'frequency': 1}]
 
     def training_step(self, batch, batch_idx):
         outputs = self(**batch)
@@ -127,31 +134,40 @@ class MRPCLightning(pl.LightningModule):
         self.log('val_loss', loss, prog_bar=True)
         self.log_dict(self.metric.compute(predictions=preds, references=labels), prog_bar=True)
 
-    @staticmethod
-    def add_model_specific_args(parent_parser):
-        parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument("--learning_rate", default=2e-5, type=float)
-        parser.add_argument("--adam_epsilon", default=1e-8, type=float)
-        parser.add_argument("--warmup_steps", default=0, type=int)
-        parser.add_argument("--weight_decay", default=0.0, type=float)
-        return parser
+    def on_epoch_end(self):
+        print()
+        print("=" * 5 + f" [DONE] [Epoch {self.current_epoch + 1}/{self.trainer.max_epochs}] " + "=" * 70)
+        print()
+
+    def on_test_epoch_end(self):
+        print()
+        print("=" * 5 + f" [DONE] [Test Epoch] " + "=" * 70)
+        print()
+
+
+def add_model_specific_args(parent_parser):
+    parser = ArgumentParser(parents=[parent_parser], add_help=False)
+    parser.add_argument("--learning_rate", default=2e-5, type=float)
+    parser.add_argument("--adam_epsilon", default=1e-8, type=float)
+    parser.add_argument("--warmup_steps", default=0, type=int)
+    parser.add_argument("--weight_decay", default=0.0, type=float)
+    return parser
 
 
 def parse_args(args=None):
     parser = ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)
-    parser = MRPCLightningData.add_argparse_args(parser)
-    parser = MRPCLightning.add_model_specific_args(parser)
+    parser = add_model_specific_args(MRPCLitData.add_argparse_args(parser))
     parser.add_argument('--seed', type=int, default=42)
     return parser.parse_args(args)
 
 
 def main(args):
     pl.seed_everything(args.seed)
-    dm = MRPCLightningData.from_argparse_args(args)
+    dm = MRPCLitData.from_argparse_args(args)
     dm.prepare_data()
     dm.setup('fit')
-    model = MRPCLightning(num_labels=dm.num_labels, eval_splits=dm.eval_splits, **vars(args))
+    model = MRPCLit(num_labels=dm.num_labels, eval_splits=dm.eval_splits, **vars(args))
     trainer = pl.Trainer.from_argparse_args(args)
     return dm, model, trainer
 

@@ -55,7 +55,7 @@ def generate_mnli_bert_dataloaders():
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
     processor = glue.MnliProcessor()
 
-    examples: List[InputExample] = processor.get_train_examples('glue_data/MNLI')[:3]
+    examples: List[InputExample] = processor.get_train_examples('glue_data/MNLI')[:300]  # for quick test
     features: List[InputFeatures] = convert_examples_to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
     train_dataset: TensorDataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
                                                  torch.tensor([f.attention_mask for f in features], dtype=torch.long),

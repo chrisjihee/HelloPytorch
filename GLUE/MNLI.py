@@ -1,5 +1,5 @@
 import dataclasses
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import datasets
 import pytorch_lightning
@@ -24,13 +24,10 @@ def split_validation(dataset, rate):
 
 
 class DataMNLI(LightningDataModule):
-    def __init__(self, pretrained_model: str, max_seq_length: int = 128,
-                 label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification', rate_valid=0.05,
-                 data_dir: str = 'glue_data/MNLI', batch_size: int = 32, num_workers: int = 8):
+    def __init__(self, pretrained_model: str, max_seq_length: int = 128, rate_valid=0.05, batch_size: int = 32, num_workers: int = 8, data_dir: str = 'glue_data/MNLI'):
         super().__init__()
-        self.label_list = label_list
-        self.output_mode = output_mode
-
+        self.label_list = ['contradiction', 'neutral', 'entailment']
+        self.output_mode = 'classification'
         self.processor = glue.MnliProcessor()
         self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
         self.max_seq_length = max_seq_length
@@ -38,33 +35,34 @@ class DataMNLI(LightningDataModule):
         self.rate_valid = rate_valid
         self.batch_size = batch_size
         self.num_workers = num_workers
-
         self.examples: Dict[str, List[InputExample]] = dict()
-        self.features: Dict[str, List[InputFeatures]] = dict()
+        # self.features: Dict[str, List[InputFeatures]] = dict()
         self.dataset: Dict[str, TensorDataset] = dict()
 
     def prepare_data(self):
         self.examples['train'] = self.processor.get_train_examples(self.data_dir)[:self.batch_size * 100 * 3]  # for quick test
         self.examples['test'] = self.processor.get_dev_examples(self.data_dir)
-        self.features['train'] = to_features(self.examples['train'], tokenizer=self.tokenizer, max_length=self.max_seq_length, label_list=self.label_list, output_mode=self.output_mode)
-        self.features['test'] = to_features(self.examples['train'], tokenizer=self.tokenizer, max_length=self.max_seq_length, label_list=self.label_list, output_mode=self.output_mode)
 
-    def setup(self, stage=None):
-        self.dataset['train'] = TensorDataset(torch.tensor([f.input_ids for f in self.features['train']], dtype=torch.long),
-                                              torch.tensor([f.attention_mask for f in self.features['train']], dtype=torch.long),
-                                              torch.tensor([f.token_type_ids for f in self.features['train']], dtype=torch.long),
-                                              torch.tensor([f.label for f in self.features['train']], dtype=torch.long))
-        self.dataset['test'] = TensorDataset(torch.tensor([f.input_ids for f in self.features['test']], dtype=torch.long),
-                                             torch.tensor([f.attention_mask for f in self.features['test']], dtype=torch.long),
-                                             torch.tensor([f.token_type_ids for f in self.features['test']], dtype=torch.long),
-                                             torch.tensor([f.label for f in self.features['test']], dtype=torch.long))
-        # print(f"#examples: {len(self.examples['train'])}")
-        # print(f"examples[0]={self.examples['train'][0]}")
-        # print(f"features[0]={self.features['train'][0]}")
-        # print(f"keys of features={dataclasses.asdict(self.features['train'][0]).keys()}")
-        # print(self.dataset['train'][0])
-        # exit(1)
-        self.dataset['train'], self.dataset['valid'] = split_validation(self.dataset['train'], self.rate_valid)
+    def setup(self, stage: Optional[str] = None):
+        if stage == 'fit':
+            features = to_features(self.examples['train'], tokenizer=self.tokenizer, max_length=self.max_seq_length, label_list=self.label_list, output_mode=self.output_mode)
+            self.dataset['train'] = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
+                                                  torch.tensor([f.attention_mask for f in features], dtype=torch.long),
+                                                  torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
+                                                  torch.tensor([f.label for f in features], dtype=torch.long))
+            # print(f"#examples: {len(self.examples['train'])}")
+            # print(f"examples[0]={self.examples['train'][0]}")
+            # print(f"features[0]={features[0]}")
+            # print(f"keys of features={dataclasses.asdict(features[0]).keys()}")
+            # print(self.dataset['train'][0])
+            # exit(1)
+            self.dataset['train'], self.dataset['valid'] = split_validation(self.dataset['train'], self.rate_valid)
+        elif stage == 'test':
+            features = to_features(self.examples['train'], tokenizer=self.tokenizer, max_length=self.max_seq_length, label_list=self.label_list, output_mode=self.output_mode)
+            self.dataset['test'] = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
+                                                 torch.tensor([f.attention_mask for f in features], dtype=torch.long),
+                                                 torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
+                                                 torch.tensor([f.label for f in features], dtype=torch.long))
 
     def train_dataloader(self):
         return DataLoader(self.dataset['train'], batch_size=self.batch_size, num_workers=self.num_workers,

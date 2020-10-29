@@ -1,89 +1,105 @@
-import dataclasses
-from typing import Any, List
+from typing import List, Dict
+
 import datasets
+import pytorch_lightning
 import torch
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from sklearn.metrics import accuracy_score
 from torch import nn
 from torch.nn.functional import cross_entropy
 from torch.utils.data import TensorDataset, RandomSampler, DataLoader, random_split
+from transformers import AutoTokenizer
 from transformers import BertModel, BertTokenizer
-from transformers import glue_convert_examples_to_features as convert_examples_to_features
+from transformers import glue_convert_examples_to_features as to_features
 from transformers.data.processors import glue
-from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer
 from transformers.data.processors.utils import InputExample, InputFeatures
 
+pytorch_lightning.seed_everything(10000)
 pretrained_model = 'bert-base-cased'
+
+
+def split_validation(dataset, rate):
+    num_valid = int(len(dataset) * rate)
+    num_train = len(dataset) - num_valid
+    return random_split(dataset=dataset, lengths=[num_train, num_valid])
 
 
 class DataMNLI(LightningDataModule):
     def __init__(self, pretrained_model: str = 'bert-base-cased', max_seq_length: int = 128,
-                 max_train_data: int = 1000, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification',
+                 label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification', rate_valid=0.05,
                  data_dir: str = 'glue_data/MNLI', batch_size: int = 32, num_workers: int = 8):
         super().__init__()
-        self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
-        self.processor = glue.MnliProcessor()
-
-        self.max_train_data = max_train_data
         self.label_list = label_list
         self.output_mode = output_mode
 
+        self.processor = glue.MnliProcessor()
+        self.tokenizer = BertTokenizer.from_pretrained(pretrained_model)
+        self.max_seq_length = max_seq_length
         self.data_dir = data_dir
+        self.rate_valid = rate_valid
         self.batch_size = batch_size
         self.num_workers = num_workers
 
-        self.dataset = dict()
+        self.examples: Dict[str, List[InputExample]] = dict()
+        self.features: Dict[str, List[InputFeatures]] = dict()
+        self.dataset: Dict[str, TensorDataset] = dict()
 
     def prepare_data(self):
-        pass  # done by download_glue_data.py
+        self.examples['train'] = self.processor.get_train_examples(self.data_dir)[:self.batch_size * 100 * 3]  # for quick test
+        self.examples['test'] = self.processor.get_dev_examples(self.data_dir)
+        self.features['train'] = to_features(self.examples['train'], tokenizer=self.tokenizer, max_length=self.max_seq_length, label_list=self.label_list, output_mode=self.output_mode)
+        self.features['test'] = to_features(self.examples['train'], tokenizer=self.tokenizer, max_length=self.max_seq_length, label_list=self.label_list, output_mode=self.output_mode)
 
     def setup(self, stage=None):
-        self.dataset['train'] = self.processor.get_train_examples(self.data_dir)[:self.max_train_data]
-        self.dataset['test'] = self.processor.get_dev_examples(self.data_dir)
+        self.dataset['train'] = TensorDataset(torch.tensor([f.input_ids for f in self.features['train']], dtype=torch.long),
+                                              torch.tensor([f.attention_mask for f in self.features['train']], dtype=torch.long),
+                                              torch.tensor([f.token_type_ids for f in self.features['train']], dtype=torch.long),
+                                              torch.tensor([f.label for f in self.features['train']], dtype=torch.long))
+        self.dataset['test'] = TensorDataset(torch.tensor([f.input_ids for f in self.features['test']], dtype=torch.long),
+                                             torch.tensor([f.attention_mask for f in self.features['test']], dtype=torch.long),
+                                             torch.tensor([f.token_type_ids for f in self.features['test']], dtype=torch.long),
+                                             torch.tensor([f.label for f in self.features['test']], dtype=torch.long))
+        # print(f"#examples: {len(examples)}")
+        # print(f"examples[0]={examples[0]}")
+        # print(f"features[0]={features[0]}")
+        # print(f"keys of features={dataclasses.asdict(features[0]).keys()}")
+        # print(train_dataset[0])
+        # exit(1)
+
+        self.dataset['train'], self.dataset['valid'] = split_validation(self.dataset['train'], self.rate_valid)
 
     def train_dataloader(self):
-        pass
+        return DataLoader(self.dataset['train'], batch_size=self.batch_size, num_workers=self.num_workers,
+                          sampler=RandomSampler(self.dataset['train']))
 
     def val_dataloader(self):
-        pass
+        return DataLoader(self.dataset['valid'], batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        pass
+        return DataLoader(self.dataset['test'], batch_size=self.batch_size, num_workers=self.num_workers)
 
 
 def generate_mnli_bert_dataloaders():
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
     processor = glue.MnliProcessor()
 
-    examples: List[InputExample] = processor.get_train_examples('glue_data/MNLI')[:300]  # for quick test
-    features: List[InputFeatures] = convert_examples_to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
+    examples: List[InputExample] = processor.get_train_examples('glue_data/MNLI')[:32 * 100 * 3]  # for quick test
+    features: List[InputFeatures] = to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
     train_dataset: TensorDataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
                                                  torch.tensor([f.attention_mask for f in features], dtype=torch.long),
                                                  torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
                                                  torch.tensor([f.label for f in features], dtype=torch.long))
-    # print(f"#examples: {len(examples)}")
-    # print(f"examples[0]={examples[0]}")
-    # print(f"features[0]={features[0]}")
-    # print(f"keys of features={dataclasses.asdict(features[0]).keys()}")
-    # print(train_dataset[0])
-    # exit(1)
-
-    num_train_data = int(0.95 * len(train_dataset))
-    num_valid_data = len(train_dataset) - num_train_data
-    train_dataset, valid_dataset = random_split(train_dataset, [num_train_data, num_valid_data])
-    train_sampler, valid_sampler = RandomSampler(train_dataset), RandomSampler(valid_dataset)
-    train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=32, num_workers=8)
-    valid_loader = DataLoader(valid_dataset, sampler=valid_sampler, batch_size=32, num_workers=8)
+    train_dataset, valid_dataset = split_validation(train_dataset, 0.05)
+    train_loader = DataLoader(train_dataset, batch_size=32, num_workers=8, sampler=RandomSampler(train_dataset))
+    valid_loader = DataLoader(valid_dataset, batch_size=32, num_workers=8)
 
     examples: List[InputExample] = processor.get_dev_examples('glue_data/MNLI')
-    features: List[InputFeatures] = convert_examples_to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
+    features: List[InputFeatures] = to_features(examples, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
     test_dataset: TensorDataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
                                                 torch.tensor([f.attention_mask for f in features], dtype=torch.long),
                                                 torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
                                                 torch.tensor([f.label for f in features], dtype=torch.long))
-    test_sampler = RandomSampler(test_dataset)
-    test_loader = DataLoader(test_dataset, sampler=test_sampler, batch_size=32, num_workers=8)
-
+    test_loader = DataLoader(test_dataset, batch_size=32, num_workers=8)
     return train_loader, valid_loader, test_loader
 
 
@@ -156,6 +172,6 @@ if __name__ == '__main__':
     data_size = {k: len(v) for k, v in data.items()}
     print(f"* MNLI Dataset: {data_size} * {data['train'].column_names}")
 
-    trainer = Trainer(gpus=1, max_epochs=1)
+    trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0, progress_bar_refresh_rate=20)
     trainer.fit(model=ModelMNLI())
     trainer.test()

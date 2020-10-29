@@ -10,6 +10,14 @@ from torch.utils.data import random_split, DataLoader
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
+pytorch_lightning.seed_everything(10000)
+
+
+def split_validation(dataset, rate):
+    num_valid = int(len(dataset) * rate)
+    num_train = len(dataset) - num_valid
+    return random_split(dataset=dataset, lengths=[num_train, num_valid])
+
 
 def str_loss(loss: List[Tensor]):
     metric = torch.mean(torch.stack(loss))
@@ -23,11 +31,8 @@ def str_accuracy(acc: Accuracy, detail: bool = False):
     return f'{metric * 100:.2f}%' if not detail else f'{metric * 100:.2f}%(={acc.correct}/{acc.total})'
 
 
-pytorch_lightning.seed_everything(10000)
-
-
 class DataMNIST(LightningDataModule):
-    def __init__(self, data_dir: str = '/dat/data/', batch_size: int = 100, num_workers: int = 8):
+    def __init__(self, batch_size: int = 100, num_workers: int = 8, data_dir: str = '/dat/data/'):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
@@ -177,7 +182,7 @@ class ModelMNIST(LightningModule):
         print()
 
 
-trainer = Trainer(max_epochs=5, num_sanity_val_steps=0, progress_bar_refresh_rate=20, gpus=1)
+trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0)
 
 if __name__ == '__main__':
     trainer.fit(model=ModelMNIST(learning_rate=0.001), datamodule=DataMNIST())

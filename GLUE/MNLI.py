@@ -5,14 +5,15 @@ import datasets
 import pytorch_lightning
 import torch
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
+from pytorch_lightning.metrics import Accuracy
 from sklearn.metrics import accuracy_score
-from torch import nn
+from torch import nn, optim, Tensor
 from torch.nn.functional import cross_entropy
 from torch.utils.data import TensorDataset, RandomSampler, DataLoader, random_split
 from transformers import BertModel, BertTokenizer
 from transformers import glue_convert_examples_to_features as to_features
 from transformers.data.processors import glue
-from transformers.data.processors.utils import InputExample, InputFeatures
+from transformers.data.processors.utils import InputExample
 
 pytorch_lightning.seed_everything(10000)
 
@@ -21,6 +22,18 @@ def split_validation(dataset, rate):
     num_valid = int(len(dataset) * rate)
     num_train = len(dataset) - num_valid
     return random_split(dataset=dataset, lengths=[num_train, num_valid])
+
+
+def str_loss(loss: List[Tensor]):
+    metric = torch.mean(torch.stack(loss))
+    return f'{metric:.4f}'
+
+
+def str_accuracy(acc: Accuracy, detail: bool = False):
+    backup = acc.correct, acc.total
+    metric = acc.compute()
+    acc.correct, acc.total = backup
+    return f'{metric * 100:.2f}%' if not detail else f'{metric * 100:.2f}%(={acc.correct}/{acc.total})'
 
 
 class DataMNLI(LightningDataModule):

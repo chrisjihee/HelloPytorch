@@ -36,8 +36,7 @@ class DataMNLI(LightningDataModule):
 
     def setup(self, stage=None):
         self.dataset['train'] = self.processor.get_train_examples(self.data_dir)[:self.max_train_data]
-        self.dataset['devel'] = self.processor.get_dev_examples(self.data_dir)
-        self.dataset['test'] = self.processor.get_test_examples(self.data_dir)
+        self.dataset['test'] = self.processor.get_dev_examples(self.data_dir)
 
     def train_dataloader(self):
         pass
@@ -56,9 +55,10 @@ def generate_mnli_bert_dataloaders():
     # ----------------------
     # TRAIN/VAL DATALOADERS
     # ----------------------
-    train = processor.get_train_examples('glue_data/MNLI')[:1000]
+    train = processor.get_train_examples('glue_data/MNLI')[:3]
     print(f"#train: {len(train)}")
-    features = convert_examples_to_features(train, tokenizer, max_length=128, label_list=['contradiction', 'neutral', 'entailment'], output_mode='classification')
+    print(f"train={train}")
+    features = convert_examples_to_features(train, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
     train_dataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
                                   torch.tensor([f.attention_mask for f in features], dtype=torch.long),
                                   torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
@@ -74,17 +74,17 @@ def generate_mnli_bert_dataloaders():
     # ----------------------
     # TEST DATALOADERS
     # ----------------------
-    devel = processor.get_dev_examples('glue_data/MNLI')
-    print(f"#devel: {len(devel)}")
-    test = processor.get_test_examples('glue_data/MNLI')
+    test = processor.get_dev_examples('glue_data/MNLI')[:3]
     print(f"#test: {len(test)}")
-    features = convert_examples_to_features(devel, tokenizer, max_length=128, label_list=['contradiction', 'neutral', 'entailment'], output_mode='classification')
+    print(f"test={test}")
+    features = convert_examples_to_features(test, tokenizer, max_length=128, label_list=('contradiction', 'neutral', 'entailment'), output_mode='classification')
     bert_mnli_test_dataset = TensorDataset(torch.tensor([f.input_ids for f in features], dtype=torch.long),
                                            torch.tensor([f.attention_mask for f in features], dtype=torch.long),
                                            torch.tensor([f.token_type_ids for f in features], dtype=torch.long),
                                            torch.tensor([f.label for f in features], dtype=torch.long))
     test_sampler = RandomSampler(bert_mnli_test_dataset)
     bert_mnli_test_dataloader = DataLoader(bert_mnli_test_dataset, sampler=test_sampler, batch_size=32, num_workers=8)
+    exit(1)
 
     return bert_mnli_train_dataloader, bert_mnli_val_dataloader, bert_mnli_test_dataloader
 

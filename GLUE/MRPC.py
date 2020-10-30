@@ -35,7 +35,7 @@ class DataMRPC(LightningDataModule):
         self.max_seq_length = max_seq_length
         self.batch_size = batch_size
         self.text_fields = ['sentence1', 'sentence2']
-        self.num_labels = 2
+        self.num_classes = 2
         self.dataset = None
         self.columns = None
         self.eval_splits = None
@@ -72,14 +72,14 @@ class DataMRPC(LightningDataModule):
 
 
 class ModelMRPC(LightningModule):
-    def __init__(self, pretrained_model: str, num_labels: int,
+    def __init__(self, pretrained_model: str, num_classes: int,
                  learning_rate: float = 2e-5,
                  adam_epsilon: float = 1e-8):
         super().__init__()
         self.learning_rate = learning_rate
         self.adam_epsilon = adam_epsilon
         self.save_hyperparameters()
-        self.config = AutoConfig.from_pretrained(pretrained_model, num_labels=num_labels)
+        self.config = AutoConfig.from_pretrained(pretrained_model, num_labels=num_classes)
         self.model = AutoModelForSequenceClassification.from_pretrained(pretrained_model, config=self.config)
         self.metric = datasets.load_metric('glue', 'mrpc', experiment_id="MyExpriment-1")
 
@@ -125,9 +125,9 @@ if __name__ == '__main__':
     data_size = {k: len(v) for k, v in data.items()}
     print(f"* MRPC Dataset: {data_size} * {data['train'].column_names}")
 
-    dm = DataMRPC(pretrained_model='distilbert-base-cased')
-    dm.prepare_data()
-    dm.setup('fit')
+    loader = DataMRPC(pretrained_model='distilbert-base-cased')
+    loader.prepare_data()
+    loader.setup('fit')
     trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0, progress_bar_refresh_rate=20)
-    model = ModelMRPC(pretrained_model='distilbert-base-cased', num_labels=dm.num_labels, learning_rate=2e-5, adam_epsilon=1e-8)
-    trainer.fit(model=model, datamodule=dm)
+    model = ModelMRPC(pretrained_model='distilbert-base-cased', num_classes=loader.num_classes, learning_rate=2e-5, adam_epsilon=1e-8)
+    trainer.fit(model=model, datamodule=loader)

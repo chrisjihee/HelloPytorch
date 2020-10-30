@@ -60,7 +60,7 @@ class DataMNIST(LightningDataModule):
 
 
 class ModelMNIST(LightningModule):
-    def __init__(self, learning_rate, metric_detail=True):
+    def __init__(self, learning_rate: float = 0.001, metric_detail: bool = True):
         super().__init__()
         self.learning_rate = learning_rate
         self.metric_detail = metric_detail
@@ -184,5 +184,5 @@ class ModelMNIST(LightningModule):
 trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0)
 
 if __name__ == '__main__':
-    trainer.fit(model=ModelMNIST(learning_rate=0.001), datamodule=DataMNIST())
+    trainer.fit(model=ModelMNIST(), datamodule=DataMNIST())
     trainer.test()

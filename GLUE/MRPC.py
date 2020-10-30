@@ -64,9 +64,10 @@ class DataMRPC(LightningDataModule):
         texts: List[Tuple[str, str]] = list(zip(batch['sentence1'], batch['sentence2']))
         features: BatchEncoding = self.tokenizer.batch_encode_plus(texts, padding='max_length', max_length=self.max_seq_length, truncation=True)
         features['labels']: List[int] = batch['label']
+        # features['type_ids']: List[List[int]] = [x.type_ids for x in features.encodings]
         if not self.first_batch_visited:
-            print(f'  - features.data = {list(features.data.keys())} * {len(features.data["input_ids"])}')
-            print(f'  - features.encodings = {features.encodings[-1]} * {len(features.encodings)}')
+            print(f'  - features.data = {list(features.data.keys())}')
+            print(f'  - features.encodings = {features.encodings[-1]}')
             self.first_batch_visited = True
         return features
 

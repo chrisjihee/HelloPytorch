@@ -58,7 +58,7 @@ class DataMRPC(LightningDataModule):
             data = data.map(self.to_features, batched=True, remove_columns=['label'])
             data.set_format(type="torch", columns=[c for c in data.column_names if c in self.loader_columns])
             self.dataset[name] = data
-            print(f' * dataset[{name}] = {data.column_names} * {data.num_rows}')
+            # print(f'  - dataset[{name}] = {data.column_names} * {data.num_rows}')
 
     def to_features(self, batch: Dict[str, List[Union[int, str]]]):
         texts: List[Tuple[str, str]] = list(zip(batch['sentence1'], batch['sentence2']))

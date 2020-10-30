@@ -1,7 +1,6 @@
 import dataclasses
 from typing import List, Dict, Optional
 
-import datasets
 import pytorch_lightning
 import torch
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
@@ -10,7 +9,7 @@ from sklearn.metrics import accuracy_score
 from torch import nn, optim, Tensor
 from torch.nn.functional import cross_entropy
 from torch.utils.data import random_split, TensorDataset, RandomSampler, DataLoader, Dataset
-from transformers import BertModel, BertTokenizer, PreTrainedModel, AutoModelForSequenceClassification, AutoConfig, BertForSequenceClassification, BertConfig, AutoTokenizer
+from transformers import BertModel, BertTokenizer
 from transformers import glue_convert_examples_to_features as to_features
 from transformers.data.processors import glue
 from transformers.data.processors.utils import InputExample
@@ -37,7 +36,8 @@ def str_accuracy(acc: Accuracy, detail: bool = False):
 
 
 class DataMNLI(LightningDataModule):
-    def __init__(self, pretrain_type: str, max_seq_length: int = 128, rate_valid: float = 0.05, batch_size: int = 32, num_workers: int = 8, data_dir: str = 'glue_data/MNLI'):
+    def __init__(self, pretrain_type: str, max_seq_length: int = 128, rate_valid: float = 0.05,
+                 batch_size: int = 32, num_workers: int = 8, data_dir: str = 'glue_data/MNLI'):
         super().__init__()
         self.pretrain_type = pretrain_type
         self.output_mode = 'classification'

@@ -1,7 +1,10 @@
+import os
+import warnings
 from typing import List, Dict, Optional, Any
 
-import torch
 import pytorch_lightning
+import torch
+import transformers
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from pytorch_lightning.metrics import Accuracy
 from torch import nn, optim, Tensor
@@ -10,6 +13,10 @@ from torch.utils.data import random_split, DataLoader, Dataset
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
+os.environ['CURRENT_FILE'] = 'MNIST.py'
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+warnings.filterwarnings('ignore')
+transformers.logging.set_verbosity_error()
 pytorch_lightning.seed_everything(10000)
 
 
@@ -32,7 +39,8 @@ def str_accuracy(acc: Accuracy, detail: bool = False):
 
 
 class DataMNIST(LightningDataModule):
-    def __init__(self, rate_valid: float = 0.05, batch_size: int = 100, num_workers: int = 8, data_dir: str = '/dat/data/'):
+    def __init__(self, rate_valid: float = 0.05,
+                 batch_size: int = 100, num_workers: int = 8, data_dir: str = '/dat/data/'):
         super().__init__()
         self.data_dir = data_dir
         self.rate_valid = rate_valid

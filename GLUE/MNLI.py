@@ -1,8 +1,11 @@
 import dataclasses
+import os
+import warnings
 from typing import List, Dict, Optional
 
 import pytorch_lightning
 import torch
+import transformers
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from pytorch_lightning.metrics import Accuracy, Fbeta
 from sklearn.metrics import accuracy_score
@@ -14,6 +17,10 @@ from transformers import glue_convert_examples_to_features as to_features
 from transformers.data.processors import glue
 from transformers.data.processors.utils import InputExample
 
+os.environ['CURRENT_FILE'] = 'MNLI.py'
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+warnings.filterwarnings('ignore')
+transformers.logging.set_verbosity_error()
 pytorch_lightning.seed_everything(10000)
 
 

@@ -1,14 +1,23 @@
+import os
+import warnings
 from typing import List, Dict, Tuple, Union, Optional
 
 import datasets
 import pytorch_lightning
 import torch
-from datasets import DatasetDict
+import transformers
+from datasets import DatasetDict, Dataset
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from pytorch_lightning.metrics import Accuracy
 from torch import optim, Tensor
 from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer, BatchEncoding
+
+os.environ['CURRENT_FILE'] = 'MRPC.py'
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+warnings.filterwarnings('ignore')
+transformers.logging.set_verbosity_error()
+pytorch_lightning.seed_everything(10000)
 
 
 def str_loss(loss: List[Tensor]):
@@ -21,9 +30,6 @@ def str_accuracy(acc: Accuracy, detail: bool = False):
     metric = acc.compute()
     acc.correct, acc.total = backup
     return f'{metric * 100:.2f}%' if not detail else f'{metric * 100:.2f}%(={acc.correct}/{acc.total})'
-
-
-pytorch_lightning.seed_everything(10000)
 
 
 class DataMRPC(LightningDataModule):
@@ -39,18 +45,15 @@ class DataMRPC(LightningDataModule):
         self.num_workers = num_workers
         self.num_classes = 2
         self.dataset = None
-        # self.columns = None
-        self.eval_splits = None
         self.first_batch_visited = False
 
     def prepare_data(self):
         self.dataset: DatasetDict = datasets.load_dataset(path='glue', name='mrpc')
-        self.dataset['valid'] = self.dataset.pop('validation')
+        self.dataset['valid']: Dataset = self.dataset.pop('validation')
         data_size = {k: len(v) for k, v in self.dataset.items()}
         print(f"* MRPC Dataset: {data_size} * {self.dataset['train'].column_names}")
 
     def setup(self, stage: Optional[str] = None):
-        self.eval_splits = ['valid']
         for name, data in self.dataset.items():
             data = data.map(self.to_features, batched=True, remove_columns=['label'])
             data.set_format(type="torch", columns=[c for c in data.column_names if c in self.loader_columns])
@@ -62,21 +65,19 @@ class DataMRPC(LightningDataModule):
         features: BatchEncoding = self.tokenizer.batch_encode_plus(texts, padding='max_length', max_length=self.max_seq_length, truncation=True)
         features['labels']: List[int] = batch['label']
         if not self.first_batch_visited:
-            print(f'[to_features]')
-            print(f' - batch = {list(batch.keys())} * {len(batch["label"])}')
-            print(f' - features.data = {list(features.data.keys())} * {len(features.data["input_ids"])}')
-            print(f' - features.encodings = {features.encodings[-1]} * {len(features.encodings)}')
+            print(f'  - features.data = {list(features.data.keys())} * {len(features.data["input_ids"])}')
+            print(f'  - features.encodings = {features.encodings[-1]} * {len(features.encodings)}')
             self.first_batch_visited = True
         return features
 
     def train_dataloader(self):
-        return DataLoader(self.dataset['train'], batch_size=self.batch_size)
+        return DataLoader(self.dataset['train'], batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self.dataset['valid'], batch_size=self.batch_size)
+        return DataLoader(self.dataset['valid'], batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return DataLoader(self.dataset['test'], batch_size=self.batch_size)
+        return DataLoader(self.dataset['test'], batch_size=self.batch_size, num_workers=self.num_workers)
 
 
 class ModelMRPC(LightningModule):

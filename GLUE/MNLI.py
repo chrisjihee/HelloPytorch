@@ -96,7 +96,7 @@ class ModelMNLI(LightningModule):
             'test': {"loss": list(), "acc": Accuracy(), "f1": Fbeta(num_classes=num_classes, average='macro')},
         }
 
-        self.bert: BertModel = BertModel.from_pretrained(pretrain_type, output_attentions=True)
+        self.bert = BertModel.from_pretrained(pretrain_type, output_attentions=True)
         self.linear = nn.Linear(self.bert.config.hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, token_type_ids):

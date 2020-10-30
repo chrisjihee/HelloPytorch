@@ -83,9 +83,8 @@ class ModelMRPC(LightningModule):
         self.adam_epsilon = adam_epsilon
         self.metric = datasets.load_metric('glue', 'mrpc', experiment_id="MyExpriment-1")
 
-        self.save_hyperparameters()
-        self.config: BertConfig = AutoConfig.from_pretrained(pretrain_type, num_labels=num_classes)
-        self.model: BertForSequenceClassification = AutoModelForSequenceClassification.from_pretrained(pretrain_type, config=self.config)
+        self.config = AutoConfig.from_pretrained(pretrain_type, num_labels=num_classes)
+        self.model = AutoModelForSequenceClassification.from_pretrained(pretrain_type, config=self.config)
 
     def forward(self, **inputs):
         return self.model(**inputs)
@@ -124,7 +123,7 @@ class ModelMRPC(LightningModule):
 
 
 trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0)
-provider = DataMRPC(pretrain_type='distilbert-base-cased')
+provider = DataMRPC(pretrain_type='bert-base-cased')
 predictor = ModelMRPC(pretrain_type=provider.pretrain_type, num_classes=provider.num_classes)
 
 if __name__ == '__main__':

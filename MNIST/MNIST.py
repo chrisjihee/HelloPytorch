@@ -60,9 +60,11 @@ class DataMNIST(LightningDataModule):
 
 
 class ModelMNIST(LightningModule):
-    def __init__(self, learning_rate: float = 0.001, metric_detail: bool = True):
+    def __init__(self, num_classes: int = 10,
+                 learning_rate: float = 0.001, adam_epsilon: float = 1e-8, metric_detail: bool = True):
         super().__init__()
         self.learning_rate = learning_rate
+        self.adam_epsilon = adam_epsilon
         self.metric_detail = metric_detail
         self.metric = {
             'train': {"loss": list(), "acc": Accuracy()},
@@ -87,8 +89,8 @@ class ModelMNIST(LightningModule):
         self.conv3B = nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1)
         self.relu3B = nn.ReLU()
 
-        self.fc = nn.Linear(7 * 7 * 128, 10, bias=True)
-        self.fc_bn = nn.BatchNorm1d(10)
+        self.fc = nn.Linear(7 * 7 * 128, num_classes, bias=True)
+        self.fc_bn = nn.BatchNorm1d(num_classes)
         nn.init.xavier_uniform_(self.fc.weight)
 
     def forward(self, inp):
@@ -115,7 +117,7 @@ class ModelMNIST(LightningModule):
         return out
 
     def configure_optimizers(self):
-        return optim.Adam(self.parameters(), lr=self.learning_rate)
+        return optim.Adam(self.parameters(), lr=self.learning_rate, eps=self.adam_epsilon)
 
     def training_step(self, batch: List[Tensor], batch_idx: int):
         inputs: Tensor = batch[0]
@@ -182,7 +184,9 @@ class ModelMNIST(LightningModule):
 
 
 trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0)
+provider = DataMNIST()
+predictor = ModelMNIST()
 
 if __name__ == '__main__':
-    trainer.fit(model=ModelMNIST(), datamodule=DataMNIST())
+    trainer.fit(model=predictor, datamodule=provider)
     trainer.test()

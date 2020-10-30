@@ -7,10 +7,10 @@ import torch
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from pytorch_lightning.metrics import Accuracy, Fbeta
 from sklearn.metrics import accuracy_score
-from torch import nn, Tensor
+from torch import nn, optim, Tensor
 from torch.nn.functional import cross_entropy
 from torch.utils.data import random_split, TensorDataset, RandomSampler, DataLoader, Dataset
-from transformers import BertModel, BertTokenizer
+from transformers import BertModel, BertTokenizer, PreTrainedModel, AutoModelForSequenceClassification, AutoConfig, BertForSequenceClassification, BertConfig, AutoTokenizer
 from transformers import glue_convert_examples_to_features as to_features
 from transformers.data.processors import glue
 from transformers.data.processors.utils import InputExample
@@ -54,7 +54,16 @@ class DataMNLI(LightningDataModule):
         self.dataset: Dict[str, Dataset] = dict()
 
     def prepare_data(self):
-        self.samples['fit'] = self.processor.get_train_examples(self.data_dir)[:self.batch_size * 100 * 3]  # for quick test
+        # print("prepare_data")
+        # data: datasets.dataset_dict.DatasetDict = datasets.load_dataset('glue', 'mnli')
+        # data['valid'] = data.pop('validation_matched')
+        # data['test'] = data.pop('test_matched')
+        # data.pop('validation_mismatched')
+        # data.pop('test_mismatched')
+        # data_size = {k: len(v) for k, v in data.items()}
+        # print(f"* MNLI Dataset: {data_size} * {data['train'].column_names}")
+
+        self.samples['fit'] = self.processor.get_train_examples(self.data_dir)[:self.batch_size * 100 * 1]  # for quick test
         self.samples['test'] = self.processor.get_dev_examples(self.data_dir)
 
     def setup(self, stage: Optional[str] = None):
@@ -75,7 +84,8 @@ class DataMNLI(LightningDataModule):
 
 
 class ModelMNLI(LightningModule):
-    def __init__(self, pretrain_type: str, num_classes: int, learning_rate: float = 2e-5, adam_epsilon: float = 1e-8, metric_detail: bool = True):
+    def __init__(self, pretrain_type: str, num_classes: int,
+                 learning_rate: float = 2e-5, adam_epsilon: float = 1e-8, metric_detail: bool = True):
         super(ModelMNLI, self).__init__()
         self.learning_rate = learning_rate
         self.adam_epsilon = adam_epsilon
@@ -85,18 +95,18 @@ class ModelMNLI(LightningModule):
             'valid': {"loss": list(), "acc": Accuracy(), "f1": Fbeta(num_classes=num_classes, average='macro')},
             'test': {"loss": list(), "acc": Accuracy(), "f1": Fbeta(num_classes=num_classes, average='macro')},
         }
-        self.bert = BertModel.from_pretrained(pretrain_type, output_attentions=True)
-        self.W = nn.Linear(self.bert.config.hidden_size, 3)
-        self.num_classes = 3
+
+        self.bert: BertModel = BertModel.from_pretrained(pretrain_type, output_attentions=True)
+        self.linear = nn.Linear(self.bert.config.hidden_size, num_classes)
 
     def forward(self, input_ids, attention_mask, token_type_ids):
         h, _, attn = self.bert(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         h_cls = h[:, 0]
-        logits = self.W(h_cls)
+        logits = self.linear(h_cls)
         return logits, attn
 
     def configure_optimizers(self):
-        return torch.optim.Adam([p for p in self.parameters() if p.requires_grad], lr=self.learning_rate, eps=self.adam_epsilon)
+        return optim.Adam(self.parameters(), lr=self.learning_rate, eps=self.adam_epsilon)
 
     def training_step(self, batch, batch_nb):
         input_ids, attention_mask, token_type_ids, label = batch
@@ -130,16 +140,10 @@ class ModelMNLI(LightningModule):
         self.log_dict({'avg_test_acc': avg_test_acc}, prog_bar=True)
 
 
-if __name__ == '__main__':
-    data: datasets.dataset_dict.DatasetDict = datasets.load_dataset('glue', 'mnli')
-    data['valid'] = data.pop('validation_matched')
-    data['test'] = data.pop('test_matched')
-    data.pop('validation_mismatched')
-    data.pop('test_mismatched')
-    data_size = {k: len(v) for k, v in data.items()}
-    print(f"* MNLI Dataset: {data_size} * {data['train'].column_names}")
+trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0)
+provider = DataMNLI(pretrain_type='bert-base-cased')
+predictor = ModelMNLI(pretrain_type=provider.pretrain_type, num_classes=provider.num_classes)
 
-    loaders = DataMNLI(pretrain_type='bert-base-cased')
-    trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0)
-    trainer.fit(model=ModelMNLI(pretrain_type=loaders.pretrain_type, num_classes=loaders.num_classes), datamodule=loaders)
+if __name__ == '__main__':
+    trainer.fit(model=predictor, datamodule=provider)
     trainer.test()

@@ -75,9 +75,9 @@ class ModelMNIST(LightningModule):
         self.adam_epsilon = adam_epsilon
         self.metric_detail = metric_detail
         self.metric = {
-            'train': {"loss": list(), "acc": Accuracy()},
-            'valid': {"loss": list(), "acc": Accuracy()},
-            'test': {"loss": list(), "acc": Accuracy()},
+            'train': {'Loss': list(), 'Accuracy': Accuracy()},
+            'valid': {'Loss': list(), 'Accuracy': Accuracy()},
+            'test': {'Loss': list(), 'Accuracy': Accuracy()},
         }
 
         self.conv1A = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
@@ -131,67 +131,63 @@ class ModelMNIST(LightningModule):
         inputs: Tensor = batch[0]
         labels: Tensor = batch[1]
         logits: Tensor = self(inputs)
-        loss = cross_entropy(logits, labels)
-        logits = logits.detach().cpu()
-        labels = labels.detach().cpu()
-        self.metric['train']['acc'].update(preds=logits, target=labels)
-        self.metric['train']['loss'].append(loss.detach().cpu())
+        loss: Tensor = cross_entropy(logits, labels)
+        self.metric['train']['Loss'].append(loss.detach().cpu())
+        self.metric['train']['Accuracy'].update(preds=logits.detach().cpu(), target=labels.detach().cpu())
         return loss
 
     def validation_step(self, batch: List[Tensor], batch_idx: int):
         inputs: Tensor = batch[0]
         labels: Tensor = batch[1]
         logits: Tensor = self(inputs)
-        loss = cross_entropy(logits, labels)
-        logits = logits.detach().cpu()
-        labels = labels.detach().cpu()
-        self.metric['valid']['acc'].update(preds=logits, target=labels)
-        self.metric['valid']['loss'].append(loss.detach().cpu())
+        loss: Tensor = cross_entropy(logits, labels)
+        self.metric['valid']['Loss'].append(loss.detach().cpu())
+        self.metric['valid']['Accuracy'].update(preds=logits.detach().cpu(), target=labels.detach().cpu())
         return loss
 
     def test_step(self, batch: List[Tensor], batch_idx: int):
         inputs: Tensor = batch[0]
         labels: Tensor = batch[1]
         logits: Tensor = self(inputs)
-        loss = cross_entropy(logits, labels)
+        loss: Tensor = cross_entropy(logits, labels)
         logits = logits.detach().cpu()
         labels = labels.detach().cpu()
-        self.metric['test']['acc'].update(preds=logits, target=labels)
-        self.metric['test']['loss'].append(loss.detach().cpu())
+        self.metric['test']['Loss'].append(loss.detach().cpu())
+        self.metric['test']['Accuracy'].update(preds=logits, target=labels)
         return loss
 
-    def test_epoch_end(self, outputs: List[Any]):
+    def test_epoch_end(self, outputs):
         pass
 
     def on_epoch_start(self):
         for k in self.metric.keys():
-            self.metric[k]['loss'] = list()
-            self.metric[k]['acc'].reset()
+            self.metric[k]['Loss'] = list()
+            self.metric[k]['Accuracy'].reset()
 
     def on_epoch_end(self):
         print()
         print(f"| Loss     | {{"
-              f" train: {str_loss(self.metric['train']['loss'])},"
-              f" valid: {str_loss(self.metric['valid']['loss'])} }}")
+              f" valid: {str_loss(self.metric['valid']['Loss'])},"
+              f" train: {str_loss(self.metric['train']['Loss'])} }}")
         print(f"| Accuracy | {{"
-              f" train: {str_accuracy(self.metric['train']['acc'], self.metric_detail)},"
-              f" valid: {str_accuracy(self.metric['valid']['acc'], self.metric_detail)} }}")
+              f" valid: {str_accuracy(self.metric['valid']['Accuracy'], self.metric_detail)},"
+              f" train: {str_accuracy(self.metric['train']['Accuracy'], self.metric_detail)} }}")
         print("=" * 5 + f" [DONE] [Epoch {self.current_epoch + 1}/{self.trainer.max_epochs}] " + "=" * 70)
         print()
 
     def on_test_epoch_end(self):
         print()
         print(f"| Loss     | {{"
-              f" test: {str_loss(self.metric['test']['loss'])},"
-              f" valid: {str_loss(self.metric['valid']['loss'])} }}")
+              f" test: {str_loss(self.metric['test']['Loss'])},"
+              f" valid: {str_loss(self.metric['valid']['Loss'])} }}")
         print(f"| Accuracy | {{"
-              f" test: {str_accuracy(self.metric['test']['acc'], self.metric_detail)},"
-              f" valid: {str_accuracy(self.metric['valid']['acc'], self.metric_detail)} }}")
+              f" test: {str_accuracy(self.metric['test']['Accuracy'], self.metric_detail)},"
+              f" valid: {str_accuracy(self.metric['valid']['Accuracy'], self.metric_detail)} }}")
         print("=" * 5 + f" [DONE] [Test Epoch] " + "=" * 70)
         print()
 
 
-trainer = Trainer(gpus=1, max_epochs=1, num_sanity_val_steps=0)
+trainer = Trainer(gpus=1, max_epochs=3, num_sanity_val_steps=0)
 provider = DataMNIST()
 predictor = ModelMNIST()
 

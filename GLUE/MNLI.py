@@ -49,6 +49,7 @@ class DataMNLI(LightningDataModule):
         self.pretrain_type = pretrain_type
         self.output_mode = 'classification'
         self.output_labels = ['contradiction', 'neutral', 'entailment']
+        self.input_columns = ['input_ids', 'attention_mask', 'token_type_ids', 'label']
         self.num_classes = len(self.output_labels)
         self.processor = glue.MnliProcessor()
         self.tokenizer = BertTokenizer.from_pretrained(pretrain_type)
@@ -75,7 +76,7 @@ class DataMNLI(LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         features = list(map(dataclasses.asdict, to_features(self.samples[stage], tokenizer=self.tokenizer, max_length=self.max_seq_length, output_mode=self.output_mode, label_list=self.output_labels)))
-        self.dataset[stage] = TensorDataset(*[torch.tensor([feature[key] for feature in features], dtype=torch.long) for key in features[0].keys()])
+        self.dataset[stage] = TensorDataset(*[torch.tensor([feature[key] for feature in features], dtype=torch.long) for key in self.input_columns])
         if stage == 'fit':
             self.dataset['train'], self.dataset['valid'] = split_validation(self.dataset.pop('fit'), self.rate_valid)
 

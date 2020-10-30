@@ -6,7 +6,7 @@ import datasets
 import pytorch_lightning
 import torch
 import transformers
-from datasets import DatasetDict, Dataset
+from datasets import DatasetDict, Dataset, ClassLabel
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
 from pytorch_lightning.metrics import Accuracy
 from torch import optim, Tensor
@@ -43,15 +43,15 @@ class DataMRPC(LightningDataModule):
         self.max_seq_length = max_seq_length
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.num_classes = 2
-        self.dataset = None
         self.first_batch_visited = False
+        self.dataset, self.output_labels, self.num_classes = self.prepare_data()
 
     def prepare_data(self):
-        self.dataset: DatasetDict = datasets.load_dataset(path='glue', name='mrpc')
-        self.dataset['valid']: Dataset = self.dataset.pop('validation')
-        data_size = {k: len(v) for k, v in self.dataset.items()}
-        print(f"* MRPC Dataset: {data_size} * {self.dataset['train'].column_names}")
+        dataset: DatasetDict = datasets.load_dataset(path='glue', name='mrpc')
+        dataset['valid']: Dataset = dataset.pop('validation')
+        label: ClassLabel = dataset['valid'].features['label']
+        print(f"* Dataset: {({k: len(v) for k, v in dataset.items()})} * {dataset['valid'].column_names} -> {label.names}")
+        return dataset, label.names, len(label.names)
 
     def setup(self, stage: Optional[str] = None):
         for name, data in self.dataset.items():

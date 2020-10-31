@@ -150,10 +150,8 @@ class ModelMNIST(LightningModule):
         labels: Tensor = batch[1]
         logits: Tensor = self(inputs)
         loss: Tensor = cross_entropy(logits, labels)
-        logits = logits.detach().cpu()
-        labels = labels.detach().cpu()
         self.metric['test']['Loss'].append(loss.detach().cpu())
-        self.metric['test']['Accuracy'].update(preds=logits, target=labels)
+        self.metric['test']['Accuracy'].update(preds=logits.detach().cpu(), target=labels.detach().cpu())
         return loss
 
     def test_epoch_end(self, outputs):
@@ -187,7 +185,7 @@ class ModelMNIST(LightningModule):
         print()
 
 
-trainer = Trainer(gpus=1, max_epochs=3, num_sanity_val_steps=0)
+trainer = Trainer(gpus=[0], max_epochs=3, num_sanity_val_steps=0)
 provider = DataMNIST()
 predictor = ModelMNIST()
 

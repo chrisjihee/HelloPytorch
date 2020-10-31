@@ -5,6 +5,13 @@ import torch
 from pytorch_lightning.metrics import Accuracy, Fbeta
 from pytorch_lightning.metrics.utils import METRIC_EPS
 from torch import Tensor
+from torch.utils.data import random_split
+
+
+def split_validation(dataset, rate: float):
+    num_valid = int(len(dataset) * float(rate))
+    num_train = len(dataset) - num_valid
+    return random_split(dataset=dataset, lengths=[num_train, num_valid])
 
 
 def str_loss(loss: List[Tensor]):

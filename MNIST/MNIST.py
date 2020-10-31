@@ -1,41 +1,23 @@
 import os
 import warnings
-from typing import List, Dict, Optional, Any
+from typing import Dict, Optional
 
 import pytorch_lightning
-import torch
 import transformers
 from pytorch_lightning import Trainer, LightningModule, LightningDataModule
-from pytorch_lightning.metrics import Accuracy
-from torch import nn, optim, Tensor
+from torch import nn, optim
 from torch.nn.functional import cross_entropy
-from torch.utils.data import random_split, DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.datasets import MNIST
+
+from common.metric import *
 
 os.environ['CURRENT_FILE'] = 'MNIST.py'
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 warnings.filterwarnings('ignore')
 transformers.logging.set_verbosity_error()
 pytorch_lightning.seed_everything(10000)
-
-
-def split_validation(dataset, rate: float):
-    num_valid = int(len(dataset) * float(rate))
-    num_train = len(dataset) - num_valid
-    return random_split(dataset=dataset, lengths=[num_train, num_valid])
-
-
-def str_loss(loss: List[Tensor]):
-    metric = torch.mean(torch.stack(loss))
-    return f'{metric:.4f}'
-
-
-def str_accuracy(acc: Accuracy, detail: bool = False):
-    backup = acc.correct, acc.total
-    metric = acc.compute()
-    acc.correct, acc.total = backup
-    return f'{metric * 100:.2f}%' if not detail else f'{metric * 100:.2f}%(={acc.correct}/{acc.total})'
 
 
 class DataMNIST(LightningDataModule):

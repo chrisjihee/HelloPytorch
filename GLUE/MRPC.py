@@ -170,7 +170,7 @@ class ModelMRPC(LightningModule):
         print()
 
 
-trainer = Trainer(gpus=1, max_epochs=3, num_sanity_val_steps=0)
+trainer = Trainer(gpus=1, max_epochs=5, num_sanity_val_steps=0)
 provider = DataMRPC(pretrain_type='distilbert-base-cased', dataset_name='mrpc')
 predictor = ModelMRPC(pretrain_type=provider.pretrain_type, num_classes=provider.num_classes)
 

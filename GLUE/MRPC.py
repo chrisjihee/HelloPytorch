@@ -23,24 +23,26 @@ pytorch_lightning.seed_everything(10000)
 class DataMRPC(LightningDataModule):
     loader_columns = ['datasets_idx', 'input_ids', 'token_type_ids', 'attention_mask', 'start_positions', 'end_positions', 'labels']
 
-    def __init__(self, pretrain_type: str, max_seq_length: int = 128, rate_valid: float = 0.05,
-                 batch_size: int = 32, num_workers: int = 8):
+    def __init__(self, pretrain_type: str, dataset_name: str, max_seq_length: int = 128, rate_valid: float = 0.05,
+                 batch_size: int = 32, num_workers: int = 8, num_samples: int = 10):
         super().__init__()
         self.pretrain_type = pretrain_type
+        self.dataset_name = dataset_name
         self.tokenizer = AutoTokenizer.from_pretrained(pretrain_type, use_fast=True)
         self.max_seq_length = max_seq_length
         self.rate_valid = rate_valid
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.num_samples = num_samples
         self.first_batch_visited = False
         self.dataset: Dict[str, Dataset] = dict()
         self.output_labels, self.num_classes = self.prepare_data()
         # self.input_columns = ['input_ids', 'attention_mask', 'labels']
 
     def prepare_data(self):
-        data_full: DatasetDict = datasets.load_dataset(path='glue', name='mrpc')
-        data_fit = data_full['train'].train_test_split(test_size=self.rate_valid)
-        self.dataset['test']: Dataset = data_full['validation']
+        data_all: DatasetDict = datasets.load_dataset('glue', name=self.dataset_name)
+        data_fit = data_all['train'].train_test_split(test_size=self.rate_valid)
+        self.dataset['test']: Dataset = data_all['validation']
         self.dataset['train']: Dataset = data_fit['train']
         self.dataset['valid']: Dataset = data_fit['test']
         label: ClassLabel = self.dataset['test'].features['label']
@@ -49,9 +51,8 @@ class DataMRPC(LightningDataModule):
             self.dataset[name] = self.dataset[name].map(self.to_features, batched=True, remove_columns=['label'])
             self.dataset[name].set_format(type="torch", columns=[c for c in self.dataset[name].column_names if c in self.loader_columns])
             print(f'  - dataset[{name}] = {self.dataset[name].column_names} * {self.dataset[name].num_rows}')
-            print(f"  - dataset[{name}][0] = {self.dataset[name][0].keys()} -> {self.dataset[name][0]['labels']}")
-            print(f"  - dataset[{name}][1] = {self.dataset[name][1].keys()} -> {self.dataset[name][1]['labels']}")
-            print(f"  - dataset[{name}][2] = {self.dataset[name][2].keys()} -> {self.dataset[name][2]['labels']}")
+            for i in range(self.num_samples):
+                print(f"  - dataset[{name}][{i}] = {self.dataset[name][i].keys()} -> {self.dataset[name][i]['labels']}")
         return label.names, len(label.names)
 
     def to_features(self, batch: Dict[str, List[Union[int, str]]]):
@@ -62,6 +63,7 @@ class DataMRPC(LightningDataModule):
         if not self.first_batch_visited:
             print(f'  - features.data = {list(features.data.keys())}')
             print(f'  - features.encodings = {features.encodings[-1]}')
+            print(f'  - features.encodings[-1].tokens = {features.encodings[-1].tokens}')
             self.first_batch_visited = True
         return features
 
@@ -169,7 +171,7 @@ class ModelMRPC(LightningModule):
 
 
 trainer = Trainer(gpus=1, max_epochs=3, num_sanity_val_steps=0)
-provider = DataMRPC(pretrain_type='distilbert-base-cased')
+provider = DataMRPC(pretrain_type='distilbert-base-cased', dataset_name='mrpc')
 predictor = ModelMRPC(pretrain_type=provider.pretrain_type, num_classes=provider.num_classes)
 
 if __name__ == '__main__':
